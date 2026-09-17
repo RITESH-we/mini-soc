@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+<div class="row mb-4 g-3">
+  <div class="col-md-3">
+    <div class="card stat-card">
+      <div class="card-body">
+        <div class="text-muted small">Total Alerts</div>
+        <div class="fs-2 fw-bold text-info">{{ total_alerts }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card stat-card warning">
+      <div class="card-body">
+        <div class="text-muted small">Open Alerts</div>
+        <div class="fs-2 fw-bold text-warning">{{ open_alerts }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card stat-card critical">
+      <div class="card-body">
+        <div class="text-muted small">Critical</div>
+        <div class="fs-2 fw-bold text-danger">{{ critical }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card stat-card success">
+      <div class="card-body">
+        <div class="text-muted small">Open Incidents</div>
+        <div class="fs-2 fw-bold text-success">{{ open_inc }}</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row mb-4 g-3">
+  <div class="col-md-6">
+    <div class="card">
+      <div class="card-header">Alerts by Severity</div>
+      <div class="card-body"><canvas id="sevChart" height="200"></canvas></div>
+    </div>
+  </div>
+  <div class="col-md-6">
+    <div class="card">
+      <div class="card-header">MITRE ATT&amp;CK Tactics</div>
+      <div class="card-body"><canvas id="mitreChart" height="200"></canvas></div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header d-flex justify-content-between">
+    <span>Recent Alerts</span>
+    <a href="/alerts" class="btn btn-sm btn-outline-info">View All</a>
+  </div>
+  <div class="card-body p-0">
+    <table class="table table-sm mb-0">
+      <thead><tr>
+        <th>Time</th><th>Severity</th><th>Rule</th><th>MITRE</th><th>User</th><th>IP</th>
+      </tr></thead>
+      <tbody>
+      {% for a in recent %}
+      <tr>
+        <td class="text-muted small">{{ a.timestamp[:19] }}</td>
+        <td><span class="badge badge-{{ a.severity }}">{{ a.severity }}</span></td>
+        <td>{{ a.rule_name }}</td>
+        <td class="text-muted small">{{ a.mitre_technique }}</td>
+        <td>{{ a.src_user or '-' }}</td>
+        <td>{{ a.src_ip or '-' }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6" class="text-center text-muted py-4">No alerts yet. Run main.py to start monitoring.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+fetch('/api/stats').then(r=>r.json()).then(data=>{
+  // Severity chart
+  const sevLabels = data.by_severity.map(x=>x.severity);
+  const sevData   = data.by_severity.map(x=>x.cnt);
+  const sevColors = sevLabels.map(s=>({'CRITICAL':'#da3633','HIGH':'#d29922','MEDIUM':'#388bfd','LOW':'#3fb950'}[s]||'#8b949e'));
+  new Chart(document.getElementById('sevChart'),{
+    type:'doughnut',
+    data:{labels:sevLabels, datasets:[{data:sevData, backgroundColor:sevColors}]},
+    options:{plugins:{legend:{labels:{color:'#c9d1d9'}}}}
+  });
+  // MITRE chart
+  new Chart(document.getElementById('mitreChart'),{
+    type:'bar',
+    data:{
+      labels: data.by_mitre.map(x=>x.mitre_tactic),
+      datasets:[{label:'Alerts', data:data.by_mitre.map(x=>x.cnt), backgroundColor:'#388bfd'}]
+    },
+    options:{
+      indexAxis:'y',
+      plugins:{legend:{display:false}},
+      scales:{x:{ticks:{color:'#8b949e'}}, y:{ticks:{color:'#c9d1d9'}}}
+    }
+  });
+});
+// Auto-refresh every 15 seconds
+setTimeout(()=>location.reload(), 15000);
+</script>
+{% endblock %}

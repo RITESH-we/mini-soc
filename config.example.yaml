@@ -1,0 +1,20 @@
+﻿# ============================================================
+# config.example.yaml — Copy this to config.yaml and fill keys
+# ============================================================
+
+api_keys:
+  virustotal: YOUR_VT_KEY_HERE
+  abuseipdb:  YOUR_ABUSEIPDB_KEY_HERE
+
+detection:
+  brute_force_threshold: 5
+  brute_force_window_sec: 60
+
+dashboard:
+  host: 127.0.0.1
+  port: 5000
+  debug: true
+
+logging:
+  level: INFO
+  file: minisoc.log
