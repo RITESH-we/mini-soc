@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+{% block title %}Network Security Monitoring & IDS/IPS{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h4 class="mb-0 text-info">Network Security Monitoring (NSM) &amp; Active IDS/IPS</h4>
+    <span class="text-muted small">Real-time socket inspection, port-sweep detection &amp; host firewall enforcement</span>
+  </div>
+  <div>
+    <button class="btn btn-sm btn-outline-warning" onclick="triggerScanCheck()">🔍 Run Connection Scan</button>
+  </div>
+</div>
+
+<div class="row mb-4 g-3">
+  <!-- Manual Firewall Block Card -->
+  <div class="col-md-4">
+    <div class="card h-100">
+      <div class="card-header bg-dark text-light border-secondary">
+        <strong>🛡️ Host Firewall Containment (IPS)</strong>
+      </div>
+      <div class="card-body">
+        <form method="POST" action="/network/block">
+          <div class="mb-3">
+            <label class="form-label small text-muted">Remote IP Address to Block</label>
+            <input type="text" name="ip_address" class="form-control bg-dark text-light border-secondary" placeholder="e.g. 185.220.101.5" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label small text-muted">Justification / Threat Intel Reason</label>
+            <input type="text" name="reason" class="form-control bg-dark text-light border-secondary" placeholder="Adversary C2 / Port Scan" value="Analyst manual containment block">
+          </div>
+          <button type="submit" class="btn btn-danger w-100">Block IP via Firewall (netsh)</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Active Blocklist Table -->
+  <div class="col-md-8">
+    <div class="card h-100">
+      <div class="card-header bg-dark text-light border-secondary d-flex justify-content-between">
+        <strong>Active Firewall Containment List</strong>
+        <span class="badge bg-danger">{{ blocked_ips|length }} Blocked</span>
+      </div>
+      <div class="card-body p-0">
+        <div class="table-responsive" style="max-height: 230px;">
+          <table class="table table-sm mb-0">
+            <thead>
+              <tr>
+                <th>Blocked IP</th>
+                <th>Reason</th>
+                <th>Blocked At</th>
+                <th>Status</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for b in blocked_ips %}
+              <tr>
+                <td class="text-danger fw-bold font-monospace">{{ b.ip_address }}</td>
+                <td class="small">{{ b.reason }}</td>
+                <td class="text-muted small">{{ b.blocked_at[:19] }}</td>
+                <td>
+                  <span class="badge {% if b.active==1 %}bg-danger{% else %}bg-secondary{% endif %}">
+                    {% if b.active==1 %}ACTIVE DROP{% else %}LIFTED{% endif %}
+                  </span>
+                </td>
+                <td>
+                  {% if b.active==1 %}
+                  <form method="POST" action="/network/unblock" style="display:inline;">
+                    <input type="hidden" name="ip_address" value="{{ b.ip_address }}">
+                    <button class="btn btn-xs btn-outline-success py-0 px-2" style="font-size: 0.75rem;">Unblock</button>
+                  </form>
+                  {% else %}
+                  <span class="text-muted small">-</span>
+                  {% endif %}
+                </td>
+              </tr>
+              {% else %}
+              <tr><td colspan="5" class="text-center text-muted py-3">No active IP blocks currently enforced.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Network Alerts & IDS Detection Table -->
+<div class="card">
+  <div class="card-header bg-dark text-light border-secondary d-flex justify-content-between align-items-center">
+    <span><strong>📡 Live Network Intrusion Detection (IDS) Events</strong></span>
+    <span class="badge bg-info">Auto-Inspection Engine</span>
+  </div>
+  <div class="card-body p-0">
+    <table class="table table-sm mb-0">
+      <thead>
+        <tr>
+          <th>Time</th>
+          <th>Severity</th>
+          <th>Rule</th>
+          <th>Source IP</th>
+          <th>Target Port</th>
+          <th>Protocol</th>
+          <th>MITRE Technique</th>
+          <th>Telemetry Details</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for a in net_alerts %}
+        <tr>
+          <td class="text-muted small">{{ a.timestamp[:19] }}</td>
+          <td><span class="badge badge-{{ a.severity }}">{{ a.severity }}</span></td>
+          <td class="fw-bold">{{ a.rule_name }}</td>
+          <td class="font-monospace text-warning">{{ a.src_ip }}</td>
+          <td>{{ a.dest_port or '-' }}</td>
+          <td><span class="badge bg-secondary">{{ a.protocol }}</span></td>
+          <td class="text-muted small">{{ a.mitre_technique }}</td>
+          <td class="small">{{ a.details }}</td>
+          <td>
+            <form method="POST" action="/network/block" style="display:inline;">
+              <input type="hidden" name="ip_address" value="{{ a.src_ip }}">
+              <input type="hidden" name="reason" value="IDS Alert: {{ a.rule_name }}">
+              <button class="btn btn-outline-danger btn-enrich">Block IP</button>
+            </form>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="9" class="text-center text-muted py-4">No network anomalies detected. System connection states nominal.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function triggerScanCheck() {
+  fetch('/api/network/inspect')
+    .then(r => r.json())
+    .then(d => {
+      alert("Inspection complete: " + d.detected_count + " new network anomalies identified.");
+      location.reload();
+    });
+}
+</script>
+{% endblock %}
