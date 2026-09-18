@@ -30,7 +30,6 @@ def get_system_info():
 def get_active_connections():
     connections = []
     try:
-        # Use netstat for cross-platform zero-dependency extraction
         cmd = ["netstat", "-ano"] if platform.system() == "Windows" else ["netstat", "-tulnp"]
         output = subprocess.check_output(cmd, stderr=subprocess.DEVNULL, universal_newlines=True)
         for line in output.splitlines():
@@ -47,7 +46,7 @@ def get_active_connections():
                     })
     except Exception as e:
         connections.append({"error": str(e)})
-    return connections[:50] # Top 50 connections
+    return connections[:50]
 
 def get_top_processes():
     procs = []
@@ -93,7 +92,6 @@ def execute_remediation(action_payload):
         return f"Process {target} killed"
     elif action == "isolate_host":
         if platform.system() == "Windows":
-            # Block all non-local outbound traffic
             subprocess.run([
                 "netsh", "advfirewall", "firewall", "add", "rule",
                 "name=MiniSOC_Endpoint_Quarantine", "dir=out", "action=block"
@@ -111,11 +109,15 @@ def send_telemetry(server_url):
     req = urllib.request.Request(
         server_url,
         data=data_bytes,
-        headers={"Content-Type": "application/json", "User-Agent": f"MiniSOC-Agent/{AGENT_VERSION}"}
+        headers={
+            "Content-Type": "application/json",
+            "User-Agent": f"MiniSOC-Agent/{AGENT_VERSION}",
+            "ngrok-skip-browser-warning": "true"
+        }
     )
     
     try:
-        with urllib.request.urlopen(req, timeout=5) as response:
+        with urllib.request.urlopen(req, timeout=8) as response:
             if response.status == 200:
                 res_data = json.loads(response.read().decode("utf-8"))
                 if "command" in res_data:
