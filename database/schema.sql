@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS alerts (
     description      TEXT,
     src_ip           TEXT,
     src_user         TEXT,
+    device_name      TEXT,
     process          TEXT,
     event_id         INTEGER,
     mitre_tactic     TEXT,
@@ -70,4 +71,12 @@ CREATE TABLE IF NOT EXISTS endpoints (
     last_heartbeat  TEXT,
     status          TEXT DEFAULT 'ONLINE',
     pending_command TEXT DEFAULT NULL
+);
+
+CREATE TABLE IF NOT EXISTS telemetry_logs (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    hostname    TEXT NOT NULL,
+    timestamp   TEXT NOT NULL,
+    log_type    TEXT NOT NULL,
+    details     TEXT NOT NULL
 );

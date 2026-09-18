@@ -1,112 +1,197 @@
 {% extends "base.html" %}
-{% block title %}Dashboard{% endblock %}
+{% block title %}SOC Operations Console{% endblock %}
 {% block content %}
+
+<!-- Wazuh-Inspired Fleet Health Banner -->
+<div class="card mb-4 border-info">
+  <div class="card-body py-2 px-3 d-flex flex-wrap justify-content-between align-items-center bg-dark rounded">
+    <div class="d-flex align-items-center gap-3 my-1">
+      <span class="badge bg-primary fs-6">💻 Fleet Status</span>
+      <span class="small text-light"><strong>{{ total_endpoints }}</strong> Enrolled Endpoints</span>
+      <span class="small text-success">● <strong>{{ online_endpoints }}</strong> Online</span>
+      {% if isolated_endpoints > 0 %}
+      <span class="small text-danger">⚠️ <strong>{{ isolated_endpoints }}</strong> Isolated (Quarantined)</span>
+      {% endif %}
+    </div>
+    <!-- Quick Device Jump Pills -->
+    <div class="d-flex align-items-center gap-1 my-1">
+      <span class="small text-muted me-1">Filter by Device:</span>
+      <a href="/alerts" class="btn btn-xs btn-outline-secondary py-0 px-2 small">All Devices</a>
+      {% for d in devices %}
+      <a href="/alerts?device={{ d }}" class="btn btn-xs btn-outline-info py-0 px-2 small font-monospace">💻 {{ d }}</a>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+<!-- Core SOC L1 Metric Cards -->
 <div class="row mb-4 g-3">
   <div class="col-md-3">
-    <div class="card stat-card">
+    <div class="card stat-card critical">
       <div class="card-body">
-        <div class="text-muted small">Total Alerts</div>
-        <div class="fs-2 fw-bold text-info">{{ total_alerts }}</div>
+        <div class="text-muted small text-uppercase fw-bold">Critical &amp; High Priority</div>
+        <div class="fs-2 fw-bold text-danger">{{ critical_high }}</div>
+        <div class="small text-muted">Immediate triage required</div>
       </div>
     </div>
   </div>
   <div class="col-md-3">
     <div class="card stat-card warning">
       <div class="card-body">
-        <div class="text-muted small">Open Alerts</div>
+        <div class="text-muted small text-uppercase fw-bold">Open Alert Queue</div>
         <div class="fs-2 fw-bold text-warning">{{ open_alerts }}</div>
+        <div class="small text-muted">Awaiting analyst action</div>
       </div>
     </div>
   </div>
   <div class="col-md-3">
-    <div class="card stat-card critical">
+    <div class="card stat-card">
       <div class="card-body">
-        <div class="text-muted small">Critical</div>
-        <div class="fs-2 fw-bold text-danger">{{ critical }}</div>
+        <div class="text-muted small text-uppercase fw-bold">Communicating Devices</div>
+        <div class="fs-2 fw-bold text-info">{{ total_endpoints }}</div>
+        <div class="small text-muted">Active host log shippers</div>
       </div>
     </div>
   </div>
   <div class="col-md-3">
     <div class="card stat-card success">
       <div class="card-body">
-        <div class="text-muted small">Open Incidents</div>
+        <div class="text-muted small text-uppercase fw-bold">Active Cases / Incidents</div>
         <div class="fs-2 fw-bold text-success">{{ open_inc }}</div>
+        <div class="small text-muted">Under formal investigation</div>
       </div>
     </div>
   </div>
 </div>
 
+<!-- Visual Analytics: Threat Matrix & MITRE ATT&CK -->
 <div class="row mb-4 g-3">
-  <div class="col-md-6">
-    <div class="card">
-      <div class="card-header">Alerts by Severity</div>
-      <div class="card-body"><canvas id="sevChart" height="200"></canvas></div>
+  <div class="col-md-5">
+    <div class="card h-100">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span><strong>Threat Severity Distribution</strong></span>
+        <span class="badge bg-secondary">Live Metrics</span>
+      </div>
+      <div class="card-body d-flex align-items-center justify-content-center">
+        <canvas id="sevChart" height="210"></canvas>
+      </div>
     </div>
   </div>
-  <div class="col-md-6">
-    <div class="card">
-      <div class="card-header">MITRE ATT&amp;CK Tactics</div>
-      <div class="card-body"><canvas id="mitreChart" height="200"></canvas></div>
+  <div class="col-md-7">
+    <div class="card h-100">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span><strong>MITRE ATT&amp;CK Tactic Coverage</strong></span>
+        <span class="badge bg-primary">Threat Matrix</span>
+      </div>
+      <div class="card-body">
+        <canvas id="mitreChart" height="210"></canvas>
+      </div>
     </div>
   </div>
 </div>
 
+<!-- Real-Time Alert Feed with Omnisearch -->
 <div class="card">
-  <div class="card-header d-flex justify-content-between">
-    <span>Recent Alerts</span>
-    <a href="/alerts" class="btn btn-sm btn-outline-info">View All</a>
+  <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+    <div class="d-flex align-items-center gap-2">
+      <strong>🚨 Live SOC Ingestion Stream</strong>
+      <span class="badge bg-info">Auto-Refreshes</span>
+    </div>
+    <div class="d-flex gap-2">
+      <input type="text" id="liveSearch" class="form-control form-control-sm bg-dark text-light border-secondary" placeholder="🔍 Instant search by Device, IP, Rule, User..." onkeyup="filterLiveAlerts()" style="width: 320px;">
+      <a href="/alerts" class="btn btn-sm btn-outline-info">Open Full Triage View</a>
+    </div>
   </div>
   <div class="card-body p-0">
-    <table class="table table-sm mb-0">
-      <thead><tr>
-        <th>Time</th><th>Severity</th><th>Rule</th><th>MITRE</th><th>User</th><th>IP</th>
-      </tr></thead>
-      <tbody>
-      {% for a in recent %}
-      <tr>
-        <td class="text-muted small">{{ a.timestamp[:19] }}</td>
-        <td><span class="badge badge-{{ a.severity }}">{{ a.severity }}</span></td>
-        <td>{{ a.rule_name }}</td>
-        <td class="text-muted small">{{ a.mitre_technique }}</td>
-        <td>{{ a.src_user or '-' }}</td>
-        <td>{{ a.src_ip or '-' }}</td>
-      </tr>
-      {% else %}
-      <tr><td colspan="6" class="text-center text-muted py-4">No alerts yet. Run main.py to start monitoring.</td></tr>
-      {% endfor %}
-      </tbody>
-    </table>
+    <div class="table-responsive">
+      <table class="table table-sm mb-0" id="liveTable">
+        <thead>
+          <tr>
+            <th>Time</th>
+            <th>Device / Host</th>
+            <th>Severity</th>
+            <th>Detection Rule</th>
+            <th>MITRE Technique</th>
+            <th>Target / User</th>
+            <th>Source IP</th>
+            <th>Status</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for a in recent %}
+          <tr>
+            <td class="text-muted small font-monospace">{{ a.timestamp[:19] }}</td>
+            <td>
+              <span class="badge bg-dark border border-info text-info font-monospace py-1 px-2">
+                💻 {{ a.device_name or 'Localhost' }}
+              </span>
+            </td>
+            <td><span class="badge badge-{{ a.severity }}">{{ a.severity }}</span></td>
+            <td class="fw-bold text-light">{{ a.rule_name }}</td>
+            <td class="text-muted small">{{ a.mitre_technique }}</td>
+            <td class="font-monospace small text-light">{{ a.src_user or '-' }}</td>
+            <td class="font-monospace small text-warning">{{ a.src_ip or '-' }}</td>
+            <td>
+              <span class="badge {% if a.status=='OPEN' %}bg-danger{% elif a.status=='FP' %}bg-secondary{% else %}bg-success{% endif %}">
+                {{ a.status }}
+              </span>
+            </td>
+            <td>
+              <a href="/alerts" class="btn btn-xs btn-outline-info py-0 px-2" style="font-size:0.75rem;">Triage</a>
+            </td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="9" class="text-center text-muted py-4">No active security alerts. Ingestion pipeline nominal.</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
   </div>
 </div>
 {% endblock %}
 
 {% block scripts %}
 <script>
+// Elastic-style instant client search
+function filterLiveAlerts() {
+  const query = document.getElementById('liveSearch').value.toLowerCase();
+  const rows = document.querySelectorAll('#liveTable tbody tr');
+  rows.forEach(r => {
+    const text = r.textContent.toLowerCase();
+    r.style.display = text.includes(query) ? '' : 'none';
+  });
+}
+
 fetch('/api/stats').then(r=>r.json()).then(data=>{
-  // Severity chart
+  // Severity Chart
   const sevLabels = data.by_severity.map(x=>x.severity);
   const sevData   = data.by_severity.map(x=>x.cnt);
-  const sevColors = sevLabels.map(s=>({'CRITICAL':'#da3633','HIGH':'#d29922','MEDIUM':'#388bfd','LOW':'#3fb950'}[s]||'#8b949e'));
+  const sevColors = sevLabels.map(s=>({'CRITICAL':'#ef4444','HIGH':'#f59e0b','MEDIUM':'#3b82f6','LOW':'#10b981'}[s]||'#94a3b8'));
   new Chart(document.getElementById('sevChart'),{
     type:'doughnut',
-    data:{labels:sevLabels, datasets:[{data:sevData, backgroundColor:sevColors}]},
-    options:{plugins:{legend:{labels:{color:'#c9d1d9'}}}}
+    data:{labels:sevLabels, datasets:[{data:sevData, backgroundColor:sevColors, borderWidth:0}]},
+    options:{plugins:{legend:{labels:{color:'#c9d1d9', font:{size:11}}}}}
   });
-  // MITRE chart
+
+  // MITRE Chart
   new Chart(document.getElementById('mitreChart'),{
     type:'bar',
     data:{
       labels: data.by_mitre.map(x=>x.mitre_tactic),
-      datasets:[{label:'Alerts', data:data.by_mitre.map(x=>x.cnt), backgroundColor:'#388bfd'}]
+      datasets:[{label:'Alerts', data:data.by_mitre.map(x=>x.cnt), backgroundColor:'#38bdf8'}]
     },
     options:{
       indexAxis:'y',
       plugins:{legend:{display:false}},
-      scales:{x:{ticks:{color:'#8b949e'}}, y:{ticks:{color:'#c9d1d9'}}}
+      scales:{
+        x:{ticks:{color:'#94a3b8', font:{size:10}}, grid:{color:'#1e293b'}},
+        y:{ticks:{color:'#e2e8f0', font:{size:11}}, grid:{display:false}}
+      }
     }
   });
 });
-// Auto-refresh every 15 seconds
-setTimeout(()=>location.reload(), 15000);
 </script>
 {% endblock %}

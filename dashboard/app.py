@@ -18,39 +18,100 @@ with open(CONFIG_PATH, 'r', encoding='utf-8') as f:
 app = Flask(__name__)
 init_db()
 
+def get_all_devices(conn):
+    alert_devs = [r[0] for r in conn.execute("SELECT DISTINCT device_name FROM alerts WHERE device_name IS NOT NULL AND device_name!=''").fetchall()]
+    ep_devs = [r[0] for r in conn.execute("SELECT DISTINCT hostname FROM endpoints WHERE hostname IS NOT NULL").fetchall()]
+    all_devs = sorted(list(set(alert_devs + ep_devs)))
+    return all_devs
+
 # ── Home Dashboard ────────────────────────────────────────────
 @app.route('/')
 def index():
     conn         = get_conn()
     total_alerts = conn.execute('SELECT COUNT(*) FROM alerts').fetchone()[0]
     open_alerts  = conn.execute("SELECT COUNT(*) FROM alerts WHERE status='OPEN'").fetchone()[0]
-    critical     = conn.execute("SELECT COUNT(*) FROM alerts WHERE severity='CRITICAL'").fetchone()[0]
+    critical_high= conn.execute("SELECT COUNT(*) FROM alerts WHERE severity IN ('CRITICAL', 'HIGH')").fetchone()[0]
     open_inc     = conn.execute("SELECT COUNT(*) FROM incidents WHERE status!='CLOSED'").fetchone()[0]
-    recent       = conn.execute('SELECT * FROM alerts ORDER BY id DESC LIMIT 10').fetchall()
+    
+    total_eps    = conn.execute('SELECT COUNT(*) FROM endpoints').fetchone()[0]
+    online_eps   = conn.execute("SELECT COUNT(*) FROM endpoints WHERE status='ONLINE'").fetchone()[0]
+    isolated_eps = conn.execute("SELECT COUNT(*) FROM endpoints WHERE status='ISOLATED'").fetchone()[0]
+    
+    devices      = get_all_devices(conn)
+    recent       = conn.execute('SELECT * FROM alerts ORDER BY id DESC LIMIT 15').fetchall()
     conn.close()
+    
     return render_template('index.html',
         total_alerts=total_alerts, open_alerts=open_alerts,
-        critical=critical, open_inc=open_inc, recent=recent)
+        critical_high=critical_high, open_inc=open_inc,
+        total_endpoints=total_eps, online_endpoints=online_eps,
+        isolated_endpoints=isolated_eps, devices=devices,
+        recent=recent)
 
-# ── Alerts ────────────────────────────────────────────────────
+# ── Alerts Triage ─────────────────────────────────────────────
 @app.route('/alerts')
 def alerts():
-    sev  = request.args.get('severity', 'ALL')
-    conn = get_conn()
-    if sev == 'ALL':
-        rows = conn.execute('SELECT * FROM alerts ORDER BY id DESC LIMIT 300').fetchall()
-    else:
-        rows = conn.execute('SELECT * FROM alerts WHERE severity=? ORDER BY id DESC', (sev,)).fetchall()
-    conn.close()
-    return render_template('alerts.html', alerts=rows, severity=sev)
+    sev    = request.args.get('severity', 'ALL')
+    device = request.args.get('device', '')
+    conn   = get_conn()
+    devices = get_all_devices(conn)
 
-# ── Alert API (for live refresh) ──────────────────────────────
+    query = 'SELECT * FROM alerts WHERE 1=1'
+    params = []
+
+    if sev != 'ALL':
+        query += ' AND severity=?'
+        params.append(sev)
+        
+    if device:
+        query += ' AND (device_name=? OR src_user=?)'
+        params.extend([device, device])
+
+    query += ' ORDER BY id DESC LIMIT 300'
+    rows = conn.execute(query, params).fetchall()
+    conn.close()
+
+    return render_template('alerts.html', alerts=rows, severity=sev,
+                           devices=devices, current_device=device)
+
+# ── Alert API ─────────────────────────────────────────────────
 @app.route('/api/alerts')
 def api_alerts():
     conn = get_conn()
     rows = conn.execute('SELECT * FROM alerts ORDER BY id DESC LIMIT 50').fetchall()
     conn.close()
     return jsonify([dict(r) for r in rows])
+
+# ── Escalate Alert to Incident ────────────────────────────────
+@app.route('/api/alert/<int:aid>/escalate', methods=['POST'])
+def escalate_alert(aid):
+    conn = get_conn()
+    alert = conn.execute('SELECT * FROM alerts WHERE id=?', (aid,)).fetchone()
+    if not alert:
+        conn.close()
+        return jsonify({'error': 'alert not found'}), 404
+
+    dev = alert['device_name'] or 'Remote Endpoint'
+    title = f"SEC-INC: {alert['rule_name']} detected on {dev}"
+    summary = (
+        f"Incident automatically escalated from Alert #{aid}.\n"
+        f"Rule: {alert['rule_name']} (MITRE {alert['mitre_technique'] or 'T1059'})\n"
+        f"Target Host: {dev} | User: {alert['src_user'] or 'N/A'} | Source IP: {alert['src_ip'] or 'Local'}\n"
+        f"Details: {alert['description'] or 'No extra description.'}"
+    )
+
+    cur = conn.execute("""
+        INSERT INTO incidents (title, severity, status, analyst, created_at, updated_at, summary)
+        VALUES (?, ?, 'OPEN', 'rites', ?, ?, ?)
+    """, (title, alert['severity'], datetime.now().isoformat(), datetime.now().isoformat(), summary))
+    new_id = cur.lastrowid
+
+    # Mark alert as closed (investigated)
+    conn.execute("UPDATE alerts SET status='CLOSED' WHERE id=?", (aid,))
+    conn.commit()
+    conn.close()
+
+    return jsonify({'success': True, 'incident_id': new_id, 'title': title})
 
 # ── Enrich Alert (VT, AbuseIPDB, ThreatFox, OTX) ──────────────
 @app.route('/api/alert/<int:aid>/enrich')
@@ -232,7 +293,6 @@ def receive_telemetry():
     cmd_to_send = None
     if ep_row and ep_row['pending_command']:
         cmd_to_send = {"action": ep_row['pending_command']}
-        # Clear command after delivering to agent
         conn.execute("UPDATE endpoints SET pending_command=NULL WHERE hostname=?", (hostname,))
 
     # Update or insert endpoint record
@@ -249,7 +309,6 @@ def receive_telemetry():
     """, (hostname, ip_addr, os_name, arch, ver, now_iso, current_status))
 
     # 2. Store live telemetry into telemetry_logs table
-    # Store top running processes
     for p in data.get('processes', [])[:20]:
         p_desc = f"{p.get('name', 'unknown')} | PID: {p.get('pid', '-')} | Mem: {p.get('mem_usage', p.get('mem', '-'))}"
         conn.execute("""
@@ -257,7 +316,6 @@ def receive_telemetry():
             VALUES (?, ?, 'PROCESS', ?)
         """, (hostname, now_iso, p_desc))
 
-    # Store network socket connections
     for c in data.get('connections', [])[:15]:
         c_desc = f"{c.get('proto', 'TCP')} | Remote: {c.get('remote', '-')} | State: {c.get('state', '-')} | PID: {c.get('pid', '-')}"
         conn.execute("""
@@ -265,7 +323,6 @@ def receive_telemetry():
             VALUES (?, ?, 'NETWORK_CONN', ?)
         """, (hostname, now_iso, c_desc))
 
-    # Store security audit events (Event ID 4625)
     for ev in data.get('events', []):
         raw_snippet = str(ev.get('raw', ''))[:250].replace('\n', ' ')
         e_desc = f"Rule: {ev.get('rule', 'Auth Failure')} | ID: {ev.get('event_id', 4625)} | {raw_snippet}"
@@ -274,11 +331,11 @@ def receive_telemetry():
             VALUES (?, ?, 'SECURITY_EVENT', ?)
         """, (hostname, now_iso, e_desc))
         
-        # Trigger an alert on the dashboard
+        # Trigger an alert on the dashboard with device_name
         conn.execute("""
-            INSERT INTO alerts (timestamp, severity, rule_name, description, src_ip, src_user, process, event_id, mitre_tactic, mitre_technique, raw_event, status)
-            VALUES (?, 'MEDIUM', 'Remote Endpoint Failed Login', ?, ?, ?, 'winlogon.exe', 4625, 'Credential Access', 'T1110 - Brute Force', ?, 'OPEN')
-        """, (now_iso, f"Logon failure on remote host {hostname}", ip_addr, hostname, raw_snippet))
+            INSERT INTO alerts (timestamp, severity, rule_name, description, src_ip, src_user, device_name, process, event_id, mitre_tactic, mitre_technique, raw_event, status)
+            VALUES (?, 'MEDIUM', 'Remote Endpoint Failed Login', ?, ?, ?, ?, 'winlogon.exe', 4625, 'Credential Access', 'T1110 - Brute Force', ?, 'OPEN')
+        """, (now_iso, f"Logon failure on {hostname}", ip_addr, hostname, hostname, raw_snippet))
 
     # 3. Check for suspicious processes
     SUSPICIOUS_NAMES = ['mimikatz.exe', 'nc.exe', 'ncat.exe', 'psexec.exe', 'wireshark.exe']
@@ -286,9 +343,9 @@ def receive_telemetry():
         pname = p.get('name', '').lower()
         if any(bad in pname for bad in SUSPICIOUS_NAMES):
             conn.execute("""
-                INSERT INTO alerts (timestamp, severity, rule_name, description, src_ip, src_user, process, event_id, mitre_tactic, mitre_technique, raw_event, status)
-                VALUES (?, 'HIGH', 'Suspicious Tool on Remote Endpoint', ?, ?, ?, ?, 1, 'Execution', 'T1059 - Command Execution', ?, 'OPEN')
-            """, (now_iso, f"Suspicious binary {pname} running on remote host {hostname}", ip_addr, hostname, pname, str(p)))
+                INSERT INTO alerts (timestamp, severity, rule_name, description, src_ip, src_user, device_name, process, event_id, mitre_tactic, mitre_technique, raw_event, status)
+                VALUES (?, 'HIGH', 'Suspicious Tool on Remote Endpoint', ?, ?, ?, ?, ?, 1, 'Execution', 'T1059 - Command Execution', ?, 'OPEN')
+            """, (now_iso, f"Suspicious binary {pname} running on {hostname}", ip_addr, hostname, hostname, pname, str(p)))
 
     conn.commit()
     conn.close()

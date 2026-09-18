@@ -1,73 +1,183 @@
 {% extends "base.html" %}
-{% block title %}Alerts{% endblock %}
+{% block title %}Alert Triage Console{% endblock %}
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-3">
-  <h5 class="mb-0">Alert Feed</h5>
+
+<!-- Header & Omnisearch -->
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
   <div>
-    {% for sev in ['ALL','CRITICAL','HIGH','MEDIUM','LOW'] %}
-    <a href="/alerts?severity={{ sev }}"
-       class="btn btn-sm me-1 {% if severity==sev %}btn-primary{% else %}btn-outline-secondary{% endif %}">
-      {{ sev }}
-    </a>
-    {% endfor %}
+    <h4 class="mb-0 text-info">SOC Tier 1 Alert Triage Console</h4>
+    <span class="text-muted small">Multi-device correlation, 1-click threat intel enrichment &amp; incident escalation</span>
+  </div>
+  <div class="d-flex gap-2">
+    <input type="text" id="triageSearch" class="form-control form-control-sm bg-dark text-light border-secondary" placeholder="🔍 Search by Device, IP, User, Rule..." onkeyup="filterTriageTable()" style="width: 320px;">
   </div>
 </div>
 
-<div class="card">
-  <div class="card-body p-0">
-    <table class="table table-sm mb-0">
-      <thead><tr>
-        <th>ID</th><th>Time</th><th>Severity</th><th>Rule</th>
-        <th>MITRE Technique</th><th>User</th><th>IP</th>
-        <th>VT Score</th><th>Abuse%</th><th>Status</th><th>Actions</th>
-      </tr></thead>
-      <tbody>
-      {% for a in alerts %}
-      <tr id="row-{{ a.id }}">
-        <td class="text-muted">#{{ a.id }}</td>
-        <td class="text-muted small">{{ a.timestamp[:19] }}</td>
-        <td><span class="badge badge-{{ a.severity }}">{{ a.severity }}</span></td>
-        <td>{{ a.rule_name }}</td>
-        <td class="text-muted small">{{ a.mitre_technique }}</td>
-        <td>{{ a.src_user or '-' }}</td>
-        <td>{{ a.src_ip or '-' }}</td>
-        <td id="vt-{{ a.id }}">{{ a.vt_score or '-' }}</td>
-        <td id="abuse-{{ a.id }}">{{ a.abuse_score if a.abuse_score is not none else '-' }}</td>
-        <td>
-          <span class="badge {% if a.status=='OPEN' %}bg-danger{% elif a.status=='FP' %}bg-secondary{% else %}bg-success{% endif %}">
-            {{ a.status }}
-          </span>
-        </td>
-        <td>
-          {% if a.src_ip %}
-          <button class="btn btn-outline-info btn-enrich" onclick="enrich({{ a.id }})">Enrich</button>
-          {% endif %}
-          <button class="btn btn-outline-success btn-enrich" onclick="setStatus({{ a.id }},'CLOSED')">Close</button>
-          <button class="btn btn-outline-secondary btn-enrich" onclick="setStatus({{ a.id }},'FP')">FP</button>
-        </td>
-      </tr>
-      {% else %}
-      <tr><td colspan="11" class="text-center text-muted py-4">No alerts. Run main.py to start monitoring.</td></tr>
+<!-- Quick Filter Controls: Device + Severity -->
+<div class="card mb-3 bg-dark border-secondary">
+  <div class="card-body py-2 px-3 d-flex flex-wrap justify-content-between align-items-center gap-2">
+    <!-- Device Filters -->
+    <div class="d-flex align-items-center gap-1 flex-wrap">
+      <span class="small text-muted me-1 fw-bold">Device:</span>
+      <a href="/alerts?severity={{ severity }}" class="btn btn-xs {% if not current_device %}btn-info text-dark fw-bold{% else %}btn-outline-secondary text-light{% endif %} py-0 px-2 small">
+        All Devices
+      </a>
+      {% for d in devices %}
+      <a href="/alerts?device={{ d }}&severity={{ severity }}" class="btn btn-xs {% if current_device==d %}btn-info text-dark fw-bold{% else %}btn-outline-secondary text-light{% endif %} py-0 px-2 small font-monospace">
+        💻 {{ d }}
+      </a>
       {% endfor %}
-      </tbody>
-    </table>
+    </div>
+
+    <!-- Severity Filters -->
+    <div class="d-flex align-items-center gap-1 flex-wrap">
+      <span class="small text-muted me-1 fw-bold">Severity:</span>
+      {% for sev in ['ALL', 'CRITICAL', 'HIGH', 'MEDIUM', 'LOW'] %}
+      <a href="/alerts?severity={{ sev }}{% if current_device %}&device={{ current_device }}{% endif %}"
+         class="btn btn-xs py-0 px-2 small {% if severity==sev %}btn-primary fw-bold{% else %}btn-outline-secondary text-light{% endif %}">
+        {{ sev }}
+      </a>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+<!-- Main Alert Triage Table -->
+<div class="card">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <span><strong>Active Alerts Queue</strong> (<span id="alertCount">{{ alerts|length }}</span> events)</span>
+    <span class="text-muted small">Tip: Click <strong>⚡ Enrich</strong> to score external IPs against 4 Threat Intel feeds</span>
+  </div>
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-sm mb-0" id="triageTable">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Timestamp</th>
+            <th>Device / Host</th>
+            <th>Severity</th>
+            <th>Detection Rule</th>
+            <th>MITRE Technique</th>
+            <th>Target User</th>
+            <th>Source IP</th>
+            <th>VT Score</th>
+            <th>Abuse%</th>
+            <th>Status</th>
+            <th>SOC L1 Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for a in alerts %}
+          <tr id="row-{{ a.id }}">
+            <td class="text-muted small">#{{ a.id }}</td>
+            <td class="text-muted small font-monospace">{{ a.timestamp[:19] }}</td>
+            <td>
+              <span class="badge bg-dark border border-info text-info font-monospace py-1 px-2">
+                💻 {{ a.device_name or 'Localhost' }}
+              </span>
+            </td>
+            <td><span class="badge badge-{{ a.severity }}">{{ a.severity }}</span></td>
+            <td class="fw-bold text-light">{{ a.rule_name }}</td>
+            <td class="text-muted small">{{ a.mitre_technique }}</td>
+            <td class="font-monospace small text-light">{{ a.src_user or '-' }}</td>
+            <td class="font-monospace small text-warning">{{ a.src_ip or '-' }}</td>
+            <td id="vt-{{ a.id }}" class="font-monospace small">{{ a.vt_score or '-' }}</td>
+            <td id="abuse-{{ a.id }}" class="font-monospace small">{{ a.abuse_score if a.abuse_score is not none else '-' }}</td>
+            <td>
+              <span class="badge {% if a.status=='OPEN' %}bg-danger{% elif a.status=='FP' %}bg-secondary{% else %}bg-success{% endif %}">
+                {{ a.status }}
+              </span>
+            </td>
+            <td>
+              <div class="btn-group btn-group-sm" role="group">
+                {% if a.src_ip and a.src_ip != '' %}
+                <button class="btn btn-outline-info btn-enrich py-0" onclick="enrichAlert({{ a.id }})" title="Query VirusTotal, AbuseIPDB, OTX, ThreatFox">
+                  ⚡ Enrich
+                </button>
+                {% endif %}
+                <button class="btn btn-outline-warning btn-enrich py-0" onclick="escalateToIncident({{ a.id }}, '{{ a.rule_name|replace("'", "\\'") }}', '{{ a.severity }}')" title="Create Formal Incident Ticket">
+                  📁 Escalate
+                </button>
+                <button class="btn btn-outline-success btn-enrich py-0" onclick="setStatus({{ a.id }}, 'CLOSED')" title="Mark Resolved">
+                  ✔️ Close
+                </button>
+                <button class="btn btn-outline-secondary btn-enrich py-0" onclick="setStatus({{ a.id }}, 'FP')" title="Mark False Positive">
+                  🏷️ FP
+                </button>
+              </div>
+            </td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="12" class="text-center text-muted py-5">
+              No matching alerts found for this filter.<br/>
+              <span class="small">Try switching device or severity filter.</span>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
   </div>
 </div>
 {% endblock %}
 
 {% block scripts %}
 <script>
-function enrich(id){
-  fetch('/api/alert/'+id+'/enrich').then(r=>r.json()).then(d=>{
-    document.getElementById('vt-'+id).textContent    = d.vt_score||'-';
-    document.getElementById('abuse-'+id).textContent = d.abuse_score>=0?d.abuse_score+'%':'-';
+function filterTriageTable() {
+  const query = document.getElementById('triageSearch').value.toLowerCase();
+  const rows = document.querySelectorAll('#triageTable tbody tr');
+  let matchCount = 0;
+  rows.forEach(r => {
+    const text = r.textContent.toLowerCase();
+    if(text.includes(query)) {
+      r.style.display = '';
+      matchCount++;
+    } else {
+      r.style.display = 'none';
+    }
   });
+  document.getElementById('alertCount').textContent = matchCount;
 }
-function setStatus(id,status){
-  fetch('/api/alert/'+id+'/status',{method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({status:status})
-  }).then(()=>location.reload());
+
+function enrichAlert(id) {
+  const vtCell = document.getElementById('vt-' + id);
+  const abuseCell = document.getElementById('abuse-' + id);
+  vtCell.innerHTML = '<span class="text-info spinner-border spinner-border-sm"></span>';
+  abuseCell.innerHTML = '<span class="text-info spinner-border spinner-border-sm"></span>';
+
+  fetch('/api/alert/' + id + '/enrich')
+    .then(r => r.json())
+    .then(d => {
+      vtCell.textContent = d.vt_score || '-';
+      abuseCell.textContent = (d.abuse_score >= 0) ? (d.abuse_score + '%') : '-';
+      if(d.threatfox && d.threatfox.found) {
+        alert(`🚨 ThreatFox Match: ${d.threatfox.threat_type} (${d.threatfox.malware_printable})`);
+      }
+    })
+    .catch(err => {
+      vtCell.textContent = 'Err';
+      abuseCell.textContent = 'Err';
+    });
+}
+
+function escalateToIncident(aid, ruleName, severity) {
+  if(!confirm(`Escalate alert #${aid} ('${ruleName}') to a formal Incident Case?`)) return;
+  fetch('/api/alert/' + aid + '/escalate', {method: 'POST'})
+    .then(r => r.json())
+    .then(d => {
+      alert(`[+] Successfully escalated to Incident #${d.incident_id}!\nTitle: ${d.title}`);
+      window.location.href = '/incidents';
+    });
+}
+
+function setStatus(id, status) {
+  fetch('/api/alert/' + id + '/status', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({status: status})
+  }).then(() => location.reload());
 }
 </script>
 {% endblock %}
