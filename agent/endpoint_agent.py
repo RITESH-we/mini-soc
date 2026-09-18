@@ -9,9 +9,9 @@ from datetime import datetime
 import urllib.request
 import urllib.error
 
-# Configured to your live public ngrok server by default
+# Live public ngrok server endpoint by default
 DEFAULT_SERVER = "https://underfoot-such-italics.ngrok-free.dev/api/v1/telemetry"
-AGENT_VERSION = "2.0.0"
+AGENT_VERSION = "2.1.0"
 
 def normalize_server_url(url: str) -> str:
     url = url.strip()
@@ -93,22 +93,75 @@ def get_top_processes():
         procs.append({"error": str(e)})
     return procs[:30]
 
+def get_security_audit_events():
+    """
+    Extracts recent authentication and process execution audit events
+    using native OS commands (zero dependencies).
+    """
+    events = []
+    system = platform.system()
+    try:
+        if system == "Windows":
+            # Extract last 5 logon failures (Event ID 4625)
+            cmd = ["wevtutil", "qe", "Security", "/q:*[System[(EventID=4625)]]", "/f:text", "/c:5", "/rd:true"]
+            out = subprocess.check_output(cmd, stderr=subprocess.DEVNULL, universal_newlines=True)
+            if out and len(out.strip()) > 0:
+                events.append({
+                    "event_id": 4625,
+                    "rule": "Failed Logon",
+                    "raw": out[:600]
+                })
+        elif system == "Linux":
+            # Check /var/log/auth.log for failed logins if readable
+            if os.path.exists("/var/log/auth.log"):
+                with open("/var/log/auth.log", "r") as f:
+                    lines = [l for l in f.readlines() if "Failed password" in l][-5:]
+                    for l in lines:
+                        events.append({"event_id": 4625, "rule": "Linux Auth Failure", "raw": l.strip()})
+    except Exception:
+        pass
+    return events
+
 def execute_remediation(action_payload):
     action = action_payload.get("action")
     target = action_payload.get("target")
+    
     if action == "kill_process" and target:
         if platform.system() == "Windows":
             subprocess.run(["taskkill", "/F", "/PID", str(target)], capture_output=True)
         else:
             subprocess.run(["kill", "-9", str(target)], capture_output=True)
+        print(f"[!] Process {target} terminated by MiniSOC command.")
         return f"Process {target} killed"
+        
     elif action == "isolate_host":
         if platform.system() == "Windows":
             subprocess.run([
                 "netsh", "advfirewall", "firewall", "add", "rule",
                 "name=MiniSOC_Endpoint_Quarantine", "dir=out", "action=block"
             ], capture_output=True)
+        elif platform.system() == "Linux":
+            subprocess.run(["iptables", "-A", "OUTPUT", "-j", "DROP"], capture_output=True)
+        print("\n" + "!" * 65)
+        print("[!] >>> COMMAND RECEIVED: HOST ISOLATED FROM NETWORK <<<")
+        print("[!] Outbound traffic blocked by MiniSOC EDR quarantine rule.")
+        print("!" * 65 + "\n")
         return "Host isolated from network"
+        
+    elif action == "unisolate_host":
+        if platform.system() == "Windows":
+            subprocess.run([
+                "netsh", "advfirewall", "firewall", "delete", "rule",
+                "name=MiniSOC_Endpoint_Quarantine"
+            ], capture_output=True)
+        elif platform.system() == "Linux":
+            subprocess.run(["iptables", "-D", "OUTPUT", "-j", "DROP"], capture_output=True)
+        print("\n" + "+" * 65)
+        print("[+] >>> COMMAND RECEIVED: HOST QUARANTINE REMOVED <<<")
+        print("[+] Outbound network connectivity fully restored.")
+        print("+" * 65 + "\n")
+        return "Host quarantine removed"
+        
     return "No action taken"
 
 def send_telemetry(server_url):
@@ -116,7 +169,8 @@ def send_telemetry(server_url):
     payload = {
         "system": get_system_info(),
         "connections": get_active_connections(),
-        "processes": get_top_processes()
+        "processes": get_top_processes(),
+        "events": get_security_audit_events()
     }
     data_bytes = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(
@@ -142,7 +196,7 @@ def send_telemetry(server_url):
 def run_agent(server_url=DEFAULT_SERVER, interval=15):
     server_url = normalize_server_url(server_url)
     print("=" * 60)
-    print(f"  MiniSOC Endpoint Agent v{AGENT_VERSION}")
+    print(f"  MiniSOC Endpoint Agent v{AGENT_VERSION} (Log Shipper & EDR)")
     print(f"  Target Server: {server_url}")
     print(f"  Heartbeat Interval: {interval}s")
     print("=" * 60)
@@ -151,9 +205,9 @@ def run_agent(server_url=DEFAULT_SERVER, interval=15):
         success, msg = send_telemetry(server_url)
         now_str = datetime.now().strftime("%H:%M:%S")
         if success:
-            print(f"[{now_str}] [+] Heartbeat sent successfully to {server_url}")
+            print(f"[{now_str}] [+] Heartbeat & telemetry delivered to {server_url}")
         else:
-            print(f"[{now_str}] [-] Heartbeat failed: {msg}")
+            print(f"[{now_str}] [-] Heartbeat delivery failed: {msg}")
         time.sleep(interval)
 
 if __name__ == "__main__":

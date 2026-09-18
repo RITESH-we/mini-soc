@@ -189,7 +189,7 @@ def api_network_inspect():
     detected = inspect_network_activity(auto_block=auto_ips)
     return jsonify({"detected_count": len(detected), "alerts": detected})
 
-# ── Endpoint Agent Fleet ──────────────────────────────────────
+# ── Endpoint Agent Fleet & Remote Log Receiver ────────────────
 @app.route('/agents')
 def agents_view():
     conn = get_conn()
@@ -208,24 +208,74 @@ def receive_telemetry():
     ip_addr  = sys_info.get('ip_address', '127.0.0.1')
     os_name  = sys_info.get('os', 'Unknown OS')
     arch     = sys_info.get('architecture', 'x86_64')
-    ver      = sys_info.get('agent_version', '2.0.0')
+    ver      = sys_info.get('agent_version', '2.1.0')
 
     conn = get_conn()
+    
+    # 1. Check if an analyst ordered host isolation or network restore
+    ep_row = conn.execute("SELECT pending_command, status FROM endpoints WHERE hostname=?", (hostname,)).fetchone()
+    cmd_to_send = None
+    if ep_row and ep_row['pending_command']:
+        cmd_to_send = {"action": ep_row['pending_command']}
+        # Clear command after queueing to agent
+        conn.execute("UPDATE endpoints SET pending_command=NULL WHERE hostname=?", (hostname,))
+
+    # Update or insert endpoint record
+    current_status = ep_row['status'] if ep_row else 'ONLINE'
     conn.execute("""
         INSERT INTO endpoints (hostname, ip_address, os, architecture, agent_version, last_heartbeat, status)
-        VALUES (?, ?, ?, ?, ?, ?, 'ONLINE')
+        VALUES (?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(hostname) DO UPDATE SET
             ip_address=excluded.ip_address,
             os=excluded.os,
             architecture=excluded.architecture,
             agent_version=excluded.agent_version,
-            last_heartbeat=excluded.last_heartbeat,
-            status='ONLINE'
-    """, (hostname, ip_addr, os_name, arch, ver, datetime.now().isoformat()))
+            last_heartbeat=excluded.last_heartbeat
+    """, (hostname, ip_addr, os_name, arch, ver, datetime.now().isoformat(), current_status))
+
+    # 2. Correlate remote security logs sent by friend's laptop
+    remote_events = data.get('events', [])
+    for ev in remote_events:
+        if ev.get('event_id') == 4625:
+            conn.execute("""
+                INSERT INTO alerts (timestamp, severity, rule_name, description, src_ip, src_user, process, event_id, mitre_tactic, mitre_technique, raw_event, status)
+                VALUES (?, 'MEDIUM', 'Remote Endpoint Failed Login', ?, ?, ?, 'winlogon.exe', 4625, 'Credential Access', 'T1110 - Brute Force', ?, 'OPEN')
+            """, (datetime.now().isoformat(), f"Logon failure on {hostname}", ip_addr, hostname, str(ev.get('raw', ''))[:300]))
+
+    # 3. Check for high-risk processes running on friend's laptop
+    procs = data.get('processes', [])
+    SUSPICIOUS_NAMES = ['mimikatz.exe', 'nc.exe', 'ncat.exe', 'psexec.exe', 'wireshark.exe']
+    for p in procs:
+        pname = p.get('name', '').lower()
+        if any(bad in pname for bad in SUSPICIOUS_NAMES):
+            conn.execute("""
+                INSERT INTO alerts (timestamp, severity, rule_name, description, src_ip, src_user, process, event_id, mitre_tactic, mitre_technique, raw_event, status)
+                VALUES (?, 'HIGH', 'Suspicious Tool on Remote Endpoint', ?, ?, ?, ?, 1, 'Execution', 'T1059 - Command Execution', ?, 'OPEN')
+            """, (datetime.now().isoformat(), f"Suspicious binary {pname} executed on {hostname}", ip_addr, hostname, pname, str(p)))
+
     conn.commit()
     conn.close()
 
-    return jsonify({'status': 'acknowledged', 'node': hostname})
+    res = {'status': 'acknowledged', 'node': hostname}
+    if cmd_to_send:
+        res['command'] = cmd_to_send
+    return jsonify(res)
+
+@app.route('/api/agents/<hostname>/isolate', methods=['POST'])
+def isolate_agent(hostname):
+    conn = get_conn()
+    conn.execute("UPDATE endpoints SET pending_command='isolate_host', status='ISOLATED' WHERE hostname=?", (hostname,))
+    conn.commit()
+    conn.close()
+    return jsonify({'success': True, 'message': f'Isolation command queued for {hostname}'})
+
+@app.route('/api/agents/<hostname>/unisolate', methods=['POST'])
+def unisolate_agent(hostname):
+    conn = get_conn()
+    conn.execute("UPDATE endpoints SET pending_command='unisolate_host', status='ONLINE' WHERE hostname=?", (hostname,))
+    conn.commit()
+    conn.close()
+    return jsonify({'success': True, 'message': f'Network restore command queued for {hostname}'})
 
 # ── Nova AI Humanoid Analyst API ──────────────────────────────
 @app.route('/api/ai/chat', methods=['POST'])
@@ -255,6 +305,6 @@ def stats():
     })
 
 if __name__ == '__main__':
-    app.run(host=config.get('dashboard', {}).get('host', '127.0.0.1'),
+    app.run(host=config.get('dashboard', {}).get('host', '0.0.0.0'),
             port=config.get('dashboard', {}).get('port', 5000),
             debug=config.get('dashboard', {}).get('debug', True))
