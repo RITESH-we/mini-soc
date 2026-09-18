@@ -189,13 +189,27 @@ def api_network_inspect():
     detected = inspect_network_activity(auto_block=auto_ips)
     return jsonify({"detected_count": len(detected), "alerts": detected})
 
-# ── Endpoint Agent Fleet & Remote Log Receiver ────────────────
+# ── Endpoint Fleet & Live Telemetry Inspector ─────────────────
 @app.route('/agents')
 def agents_view():
     conn = get_conn()
     rows = conn.execute("SELECT * FROM endpoints ORDER BY last_heartbeat DESC").fetchall()
     conn.close()
     return render_template('agents.html', endpoints=[dict(r) for r in rows], server_ip="127.0.0.1")
+
+@app.route('/api/agents/<hostname>/logs')
+def agent_logs(hostname):
+    conn = get_conn()
+    procs = conn.execute("SELECT * FROM telemetry_logs WHERE hostname=? AND log_type='PROCESS' ORDER BY id DESC LIMIT 25", (hostname,)).fetchall()
+    conns = conn.execute("SELECT * FROM telemetry_logs WHERE hostname=? AND log_type='NETWORK_CONN' ORDER BY id DESC LIMIT 25", (hostname,)).fetchall()
+    evts  = conn.execute("SELECT * FROM telemetry_logs WHERE hostname=? AND log_type='SECURITY_EVENT' ORDER BY id DESC LIMIT 15", (hostname,)).fetchall()
+    conn.close()
+    return jsonify({
+        'hostname': hostname,
+        'processes': [dict(p) for p in procs],
+        'connections': [dict(c) for c in conns],
+        'events': [dict(e) for e in evts]
+    })
 
 @app.route('/api/v1/telemetry', methods=['POST'])
 def receive_telemetry():
@@ -209,6 +223,7 @@ def receive_telemetry():
     os_name  = sys_info.get('os', 'Unknown OS')
     arch     = sys_info.get('architecture', 'x86_64')
     ver      = sys_info.get('agent_version', '2.1.0')
+    now_iso  = datetime.now().isoformat()
 
     conn = get_conn()
     
@@ -217,7 +232,7 @@ def receive_telemetry():
     cmd_to_send = None
     if ep_row and ep_row['pending_command']:
         cmd_to_send = {"action": ep_row['pending_command']}
-        # Clear command after queueing to agent
+        # Clear command after delivering to agent
         conn.execute("UPDATE endpoints SET pending_command=NULL WHERE hostname=?", (hostname,))
 
     # Update or insert endpoint record
@@ -231,27 +246,49 @@ def receive_telemetry():
             architecture=excluded.architecture,
             agent_version=excluded.agent_version,
             last_heartbeat=excluded.last_heartbeat
-    """, (hostname, ip_addr, os_name, arch, ver, datetime.now().isoformat(), current_status))
+    """, (hostname, ip_addr, os_name, arch, ver, now_iso, current_status))
 
-    # 2. Correlate remote security logs sent by friend's laptop
-    remote_events = data.get('events', [])
-    for ev in remote_events:
-        if ev.get('event_id') == 4625:
-            conn.execute("""
-                INSERT INTO alerts (timestamp, severity, rule_name, description, src_ip, src_user, process, event_id, mitre_tactic, mitre_technique, raw_event, status)
-                VALUES (?, 'MEDIUM', 'Remote Endpoint Failed Login', ?, ?, ?, 'winlogon.exe', 4625, 'Credential Access', 'T1110 - Brute Force', ?, 'OPEN')
-            """, (datetime.now().isoformat(), f"Logon failure on {hostname}", ip_addr, hostname, str(ev.get('raw', ''))[:300]))
+    # 2. Store live telemetry into telemetry_logs table
+    # Store top running processes
+    for p in data.get('processes', [])[:20]:
+        p_desc = f"{p.get('name', 'unknown')} | PID: {p.get('pid', '-')} | Mem: {p.get('mem_usage', p.get('mem', '-'))}"
+        conn.execute("""
+            INSERT INTO telemetry_logs (hostname, timestamp, log_type, details)
+            VALUES (?, ?, 'PROCESS', ?)
+        """, (hostname, now_iso, p_desc))
 
-    # 3. Check for high-risk processes running on friend's laptop
-    procs = data.get('processes', [])
+    # Store network socket connections
+    for c in data.get('connections', [])[:15]:
+        c_desc = f"{c.get('proto', 'TCP')} | Remote: {c.get('remote', '-')} | State: {c.get('state', '-')} | PID: {c.get('pid', '-')}"
+        conn.execute("""
+            INSERT INTO telemetry_logs (hostname, timestamp, log_type, details)
+            VALUES (?, ?, 'NETWORK_CONN', ?)
+        """, (hostname, now_iso, c_desc))
+
+    # Store security audit events (Event ID 4625)
+    for ev in data.get('events', []):
+        raw_snippet = str(ev.get('raw', ''))[:250].replace('\n', ' ')
+        e_desc = f"Rule: {ev.get('rule', 'Auth Failure')} | ID: {ev.get('event_id', 4625)} | {raw_snippet}"
+        conn.execute("""
+            INSERT INTO telemetry_logs (hostname, timestamp, log_type, details)
+            VALUES (?, ?, 'SECURITY_EVENT', ?)
+        """, (hostname, now_iso, e_desc))
+        
+        # Trigger an alert on the dashboard
+        conn.execute("""
+            INSERT INTO alerts (timestamp, severity, rule_name, description, src_ip, src_user, process, event_id, mitre_tactic, mitre_technique, raw_event, status)
+            VALUES (?, 'MEDIUM', 'Remote Endpoint Failed Login', ?, ?, ?, 'winlogon.exe', 4625, 'Credential Access', 'T1110 - Brute Force', ?, 'OPEN')
+        """, (now_iso, f"Logon failure on remote host {hostname}", ip_addr, hostname, raw_snippet))
+
+    # 3. Check for suspicious processes
     SUSPICIOUS_NAMES = ['mimikatz.exe', 'nc.exe', 'ncat.exe', 'psexec.exe', 'wireshark.exe']
-    for p in procs:
+    for p in data.get('processes', []):
         pname = p.get('name', '').lower()
         if any(bad in pname for bad in SUSPICIOUS_NAMES):
             conn.execute("""
                 INSERT INTO alerts (timestamp, severity, rule_name, description, src_ip, src_user, process, event_id, mitre_tactic, mitre_technique, raw_event, status)
                 VALUES (?, 'HIGH', 'Suspicious Tool on Remote Endpoint', ?, ?, ?, ?, 1, 'Execution', 'T1059 - Command Execution', ?, 'OPEN')
-            """, (datetime.now().isoformat(), f"Suspicious binary {pname} executed on {hostname}", ip_addr, hostname, pname, str(p)))
+            """, (now_iso, f"Suspicious binary {pname} running on remote host {hostname}", ip_addr, hostname, pname, str(p)))
 
     conn.commit()
     conn.close()

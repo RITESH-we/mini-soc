@@ -3,8 +3,8 @@
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
   <div>
-    <h4 class="mb-0 text-info">Distributed Endpoint Fleet &amp; Host Isolation (EDR)</h4>
-    <span class="text-muted small">Live status, log telemetry streaming &amp; active host network containment</span>
+    <h4 class="mb-0 text-info">Distributed Endpoint Fleet &amp; Live Telemetry</h4>
+    <span class="text-muted small">Live process tables, active socket connections &amp; remote Windows Security audit logs</span>
   </div>
   <div>
     <span class="badge bg-success fs-6">{{ endpoints|length }} Enrolled Node(s)</span>
@@ -13,8 +13,8 @@
 
 <div class="card mb-4">
   <div class="card-header bg-dark text-light border-secondary d-flex justify-content-between align-items-center">
-    <strong>📋 Managed Endpoints</strong>
-    <span class="text-muted small">Auto-refreshes on agent heartbeats (15s)</span>
+    <strong>📋 Managed Endpoints &amp; Active Nodes</strong>
+    <span class="text-muted small">Telemetry streaming every 15 seconds</span>
   </div>
   <div class="card-body p-0">
     <div class="table-responsive">
@@ -28,7 +28,7 @@
             <th>Agent Version</th>
             <th>Last Heartbeat</th>
             <th>Containment Status</th>
-            <th>EDR Quarantine Action</th>
+            <th>Live Telemetry &amp; Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -48,13 +48,16 @@
               {% endif %}
             </td>
             <td>
+              <button class="btn btn-sm btn-outline-info btn-enrich py-1 me-1" onclick="viewEndpointLogs('{{ ep.hostname }}')">
+                🔍 View Live Logs
+              </button>
               {% if ep.status == 'ISOLATED' %}
               <button class="btn btn-sm btn-success btn-enrich py-1" onclick="restoreHost('{{ ep.hostname }}')">
-                🔓 Restore Network
+                🔓 Restore
               </button>
               {% else %}
               <button class="btn btn-sm btn-danger btn-enrich py-1" onclick="isolateHost('{{ ep.hostname }}')">
-                🛡️ Isolate Host
+                🛡️ Isolate
               </button>
               {% endif %}
             </td>
@@ -73,19 +76,97 @@
   </div>
 </div>
 
+<!-- Live Telemetry Inspector Modal -->
+<div class="modal fade" id="logModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-xl">
+    <div class="modal-content bg-dark border-info text-light">
+      <div class="modal-header border-secondary">
+        <h5 class="modal-title text-info" id="logModalTitle">🔍 Remote Host Telemetry: <span id="modalHostName">-</span></h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <ul class="nav nav-tabs border-secondary mb-3" id="logTabs">
+          <li class="nav-item">
+            <button class="nav-link active bg-transparent text-info border-secondary" data-bs-toggle="tab" data-bs-target="#tab-procs">💻 Running Processes</button>
+          </li>
+          <li class="nav-item">
+            <button class="nav-link bg-transparent text-info border-secondary" data-bs-toggle="tab" data-bs-target="#tab-conns">🌐 Network Sockets</button>
+          </li>
+          <li class="nav-item">
+            <button class="nav-link bg-transparent text-info border-secondary" data-bs-toggle="tab" data-bs-target="#tab-security">📜 Security Audit Logs</button>
+          </li>
+        </ul>
+
+        <div class="tab-content" id="logTabContent">
+          <!-- Processes Tab -->
+          <div class="tab-pane fade show active" id="tab-procs">
+            <div class="table-responsive" style="max-height: 380px;">
+              <table class="table table-sm table-dark mb-0">
+                <thead>
+                  <tr>
+                    <th>Timestamp</th>
+                    <th>Process Details</th>
+                  </tr>
+                </thead>
+                <tbody id="procLogBody">
+                  <tr><td colspan="2" class="text-center text-muted">Loading live process telemetry...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Connections Tab -->
+          <div class="tab-pane fade" id="tab-conns">
+            <div class="table-responsive" style="max-height: 380px;">
+              <table class="table table-sm table-dark mb-0">
+                <thead>
+                  <tr>
+                    <th>Timestamp</th>
+                    <th>Socket Connection Telemetry</th>
+                  </tr>
+                </thead>
+                <tbody id="connLogBody">
+                  <tr><td colspan="2" class="text-center text-muted">Loading socket tables...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Security Audit Tab -->
+          <div class="tab-pane fade" id="tab-security">
+            <div class="table-responsive" style="max-height: 380px;">
+              <table class="table table-sm table-dark mb-0">
+                <thead>
+                  <tr>
+                    <th>Timestamp</th>
+                    <th>Event Details (Event ID 4625 / Auth Logs)</th>
+                  </tr>
+                </thead>
+                <tbody id="secLogBody">
+                  <tr><td colspan="2" class="text-center text-muted">No authentication failures recorded on this host yet.</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer border-secondary">
+        <button class="btn btn-sm btn-outline-info" onclick="refreshCurrentLogs()">🔄 Refresh Telemetry</button>
+        <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Deployment Runbook -->
 <div class="card">
   <div class="card-header bg-dark text-light border-secondary">
-    <strong>🚀 Quick Agent Deployment on Friend's Laptop</strong>
+    <strong>🚀 Endpoint Agent Deployment</strong>
   </div>
   <div class="card-body">
-    <p class="small text-muted mb-2">Send <code>agent/endpoint_agent.py</code> to your friend or have them clone your GitHub. Run in PowerShell or Terminal:</p>
+    <p class="small text-muted mb-2">Run this single command on any remote Windows, Linux, or Mac laptop to start shipping live logs to your MiniSOC dashboard:</p>
     <div class="bg-black p-3 rounded font-monospace small text-success">
-      # Runs with zero external libraries on any Windows, Linux, or Mac computer:<br/>
       python endpoint_agent.py
-    </div>
-    <div class="small text-muted mt-2">
-      <strong>How Isolation Works:</strong> Clicking <em>Isolate Host</em> queues an instruction. Within 15 seconds, the agent adds an outbound block rule to the remote firewall, severing malicious lateral movement and data exfiltration while keeping the MiniSOC telemetry channel alive!
     </div>
   </div>
 </div>
@@ -93,6 +174,70 @@
 
 {% block scripts %}
 <script>
+let currentHost = '';
+
+function viewEndpointLogs(hostname) {
+  currentHost = hostname;
+  document.getElementById('modalHostName').textContent = hostname;
+  const modal = new bootstrap.Modal(document.getElementById('logModal'));
+  modal.show();
+  fetchLogs(hostname);
+}
+
+function refreshCurrentLogs() {
+  if (currentHost) {
+    fetchLogs(currentHost);
+  }
+}
+
+function fetchLogs(hostname) {
+  fetch(`/api/agents/${encodeURIComponent(hostname)}/logs`)
+    .then(r => r.json())
+    .then(data => {
+      // 1. Processes
+      const procBody = document.getElementById('procLogBody');
+      if (data.processes && data.processes.length > 0) {
+        procBody.innerHTML = data.processes.map(p => `
+          <tr>
+            <td class="text-muted small font-monospace" style="width:170px;">${p.timestamp.substring(11, 19)}</td>
+            <td class="font-monospace small text-light">${p.details}</td>
+          </tr>
+        `).join('');
+      } else {
+        procBody.innerHTML = '<tr><td colspan="2" class="text-center text-muted py-3">No process records logged yet. Wait for next heartbeat.</td></tr>';
+      }
+
+      // 2. Connections
+      const connBody = document.getElementById('connLogBody');
+      if (data.connections && data.connections.length > 0) {
+        connBody.innerHTML = data.connections.map(c => `
+          <tr>
+            <td class="text-muted small font-monospace" style="width:170px;">${c.timestamp.substring(11, 19)}</td>
+            <td class="font-monospace small text-warning">${c.details}</td>
+          </tr>
+        `).join('');
+      } else {
+        connBody.innerHTML = '<tr><td colspan="2" class="text-center text-muted py-3">No active network sockets recorded yet.</td></tr>';
+      }
+
+      // 3. Security Events
+      const secBody = document.getElementById('secLogBody');
+      if (data.events && data.events.length > 0) {
+        secBody.innerHTML = data.events.map(e => `
+          <tr>
+            <td class="text-muted small font-monospace" style="width:170px;">${e.timestamp.substring(11, 19)}</td>
+            <td class="small text-danger">${e.details}</td>
+          </tr>
+        `).join('');
+      } else {
+        secBody.innerHTML = '<tr><td colspan="2" class="text-center text-muted py-3">No authentication failures reported. All login states nominal.</td></tr>';
+      }
+    })
+    .catch(err => {
+      document.getElementById('procLogBody').innerHTML = `<tr><td colspan="2" class="text-danger">Error: ${err}</td></tr>`;
+    });
+}
+
 function isolateHost(hostname) {
   if (!confirm(`WARNING: Are you sure you want to isolate '${hostname}' from the network?\n\nThis will enforce outbound firewall drops on the target machine.`)) {
     return;
