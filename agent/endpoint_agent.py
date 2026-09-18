@@ -9,8 +9,20 @@ from datetime import datetime
 import urllib.request
 import urllib.error
 
-DEFAULT_SERVER = "http://127.0.0.1:5000/api/v1/telemetry"
+# Configured to your live public ngrok server by default
+DEFAULT_SERVER = "https://underfoot-such-italics.ngrok-free.dev/api/v1/telemetry"
 AGENT_VERSION = "2.0.0"
+
+def normalize_server_url(url: str) -> str:
+    url = url.strip()
+    if not url.startswith("http://") and not url.startswith("https://"):
+        url = "https://" + url
+    if not url.endswith("/api/v1/telemetry"):
+        if url.endswith("/"):
+            url += "api/v1/telemetry"
+        else:
+            url += "/api/v1/telemetry"
+    return url
 
 def get_system_info():
     hostname = socket.gethostname()
@@ -100,6 +112,7 @@ def execute_remediation(action_payload):
     return "No action taken"
 
 def send_telemetry(server_url):
+    server_url = normalize_server_url(server_url)
     payload = {
         "system": get_system_info(),
         "connections": get_active_connections(),
@@ -117,7 +130,7 @@ def send_telemetry(server_url):
     )
     
     try:
-        with urllib.request.urlopen(req, timeout=8) as response:
+        with urllib.request.urlopen(req, timeout=10) as response:
             if response.status == 200:
                 res_data = json.loads(response.read().decode("utf-8"))
                 if "command" in res_data:
@@ -127,11 +140,12 @@ def send_telemetry(server_url):
         return False, str(e)
 
 def run_agent(server_url=DEFAULT_SERVER, interval=15):
-    print("=" * 55)
+    server_url = normalize_server_url(server_url)
+    print("=" * 60)
     print(f"  MiniSOC Endpoint Agent v{AGENT_VERSION}")
     print(f"  Target Server: {server_url}")
     print(f"  Heartbeat Interval: {interval}s")
-    print("=" * 55)
+    print("=" * 60)
     
     while True:
         success, msg = send_telemetry(server_url)
@@ -143,5 +157,5 @@ def run_agent(server_url=DEFAULT_SERVER, interval=15):
         time.sleep(interval)
 
 if __name__ == "__main__":
-    server = sys.argv[1] if len(sys.argv) > 1 else DEFAULT_SERVER
-    run_agent(server)
+    target = sys.argv[1] if len(sys.argv) > 1 else DEFAULT_SERVER
+    run_agent(target)
