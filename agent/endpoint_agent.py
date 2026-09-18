@@ -24,6 +24,19 @@ def normalize_server_url(url: str) -> str:
             url += "/api/v1/telemetry"
     return url
 
+def get_friendly_os() -> str:
+    if platform.system() == "Windows":
+        try:
+            build = sys.getwindowsversion().build
+            if build >= 22000:
+                return "Windows 11"
+            elif build >= 10240:
+                return "Windows 10"
+            return f"Windows {platform.release()}"
+        except Exception:
+            return f"Windows {platform.release()}"
+    return f"{platform.system()} {platform.release()}"
+
 def get_system_info():
     hostname = socket.gethostname()
     try:
@@ -33,7 +46,7 @@ def get_system_info():
     return {
         "hostname": hostname,
         "ip_address": ip,
-        "os": f"{platform.system()} {platform.release()}",
+        "os": get_friendly_os(),
         "architecture": platform.machine(),
         "agent_version": AGENT_VERSION,
         "timestamp": datetime.now().isoformat()
