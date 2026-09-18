@@ -5,7 +5,7 @@
 <!-- Header & Omnisearch -->
 <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
   <div>
-    <h4 class="mb-0 text-info">SOC Tier 1 Alert Triage Console</h4>
+    <h4 class="mb-0 text-info fw-bold">SOC Tier 1 Alert Triage Console</h4>
     <span class="text-muted small">Multi-device correlation, 1-click threat intel enrichment &amp; incident escalation</span>
   </div>
   <div class="d-flex gap-2">
@@ -45,12 +45,12 @@
 <!-- Main Alert Triage Table -->
 <div class="card">
   <div class="card-header d-flex justify-content-between align-items-center">
-    <span><strong>Active Alerts Queue</strong> (<span id="alertCount">{{ alerts|length }}</span> events)</span>
+    <span><strong>Active Alerts Queue</strong> (<span id="alertCount" class="text-info fw-bold">{{ alerts|length }}</span> events)</span>
     <span class="text-muted small">Tip: Click <strong>⚡ Enrich</strong> to score external IPs against 4 Threat Intel feeds</span>
   </div>
   <div class="card-body p-0">
     <div class="table-responsive">
-      <table class="table table-sm mb-0" id="triageTable">
+      <table class="table table-sm table-dark table-hover mb-0" id="triageTable">
         <thead>
           <tr>
             <th>ID</th>
@@ -70,17 +70,17 @@
         <tbody>
           {% for a in alerts %}
           <tr id="row-{{ a.id }}">
-            <td class="text-muted small">#{{ a.id }}</td>
+            <td class="text-muted small font-monospace">#{{ a.id }}</td>
             <td class="text-muted small font-monospace">{{ a.timestamp[:19] }}</td>
             <td>
-              <span class="badge bg-dark border border-info text-info font-monospace py-1 px-2">
+              <span class="badge bg-black border border-info text-info font-monospace py-1 px-2">
                 💻 {{ a.device_name or 'Localhost' }}
               </span>
             </td>
             <td><span class="badge badge-{{ a.severity }}">{{ a.severity }}</span></td>
-            <td class="fw-bold text-light">{{ a.rule_name }}</td>
-            <td class="text-muted small">{{ a.mitre_technique }}</td>
-            <td class="font-monospace small text-light">{{ a.src_user or '-' }}</td>
+            <td><span class="rule-name-text">{{ a.rule_name }}</span></td>
+            <td class="mitre-text small font-monospace">{{ a.mitre_technique or '-' }}</td>
+            <td class="user-name-text small">{{ a.src_user or '-' }}</td>
             <td class="font-monospace small text-warning">{{ a.src_ip or '-' }}</td>
             <td id="vt-{{ a.id }}" class="font-monospace small">{{ a.vt_score or '-' }}</td>
             <td id="abuse-{{ a.id }}" class="font-monospace small">{{ a.abuse_score if a.abuse_score is not none else '-' }}</td>
