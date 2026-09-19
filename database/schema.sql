@@ -70,13 +70,28 @@ CREATE TABLE IF NOT EXISTS endpoints (
     agent_version   TEXT,
     last_heartbeat  TEXT,
     status          TEXT DEFAULT 'ONLINE',
-    pending_command TEXT DEFAULT NULL
+    pending_command TEXT DEFAULT NULL,
+    risk_score      INTEGER DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS telemetry_logs (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    hostname    TEXT NOT NULL,
-    timestamp   TEXT NOT NULL,
-    log_type    TEXT NOT NULL,
-    details     TEXT NOT NULL
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    hostname     TEXT NOT NULL,
+    timestamp    TEXT NOT NULL,
+    log_type     TEXT NOT NULL,
+    details      TEXT NOT NULL,
+    event_id     INTEGER DEFAULT NULL,
+    user_name    TEXT DEFAULT NULL,
+    src_ip       TEXT DEFAULT NULL,
+    process_name TEXT DEFAULT NULL,
+    raw_json     TEXT DEFAULT NULL
+);
+
+CREATE TABLE IF NOT EXISTS entity_risk_scores (
+    entity_id    TEXT PRIMARY KEY,
+    entity_type  TEXT NOT NULL,
+    risk_score   INTEGER DEFAULT 0,
+    risk_level   TEXT DEFAULT 'LOW',
+    factors      TEXT,
+    last_updated TEXT
 );

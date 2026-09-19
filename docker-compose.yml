@@ -1,0 +1,20 @@
+version: '3.8'
+
+services:
+  minisoc-core:
+    build: .
+    container_name: minisoc-core
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    environment:
+      - FLASK_ENV=production
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ./data:/app/data
+      - ./reports:/app/reports
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/api/stats"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
