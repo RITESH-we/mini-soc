@@ -1,4 +1,4 @@
-import os, sys, yaml, io, csv
+import os, sys, yaml, io, csv, json
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
@@ -10,6 +10,8 @@ from reports.ir_generator import generate_pdf_report
 from network.ips_responder import block_ip, unblock_ip, list_blocked_ips
 from network.nsm_engine import inspect_network_activity, get_recent_network_alerts
 from ai.humanoid_analyst import nova
+from detectors.ueba_engine import calculate_entity_risk, get_top_risky_entities
+from collectors.unified_parser import parse_windows_event_xml, parse_linux_auth_log_line
 
 CONFIG_PATH = os.path.join(BASE_DIR, 'config.yaml')
 with open(CONFIG_PATH, 'r', encoding='utf-8') as f:
@@ -384,32 +386,74 @@ def receive_telemetry():
     for p in data.get('processes', [])[:20]:
         p_desc = f"{p.get('name', 'unknown')} | PID: {p.get('pid', '-')} | Mem: {p.get('mem_usage', p.get('mem', '-'))}"
         conn.execute("""
-            INSERT INTO telemetry_logs (hostname, timestamp, log_type, details)
-            VALUES (?, ?, 'PROCESS', ?)
-        """, (hostname, now_iso, p_desc))
+            INSERT INTO telemetry_logs (hostname, timestamp, log_type, details, process_name)
+            VALUES (?, ?, 'PROCESS', ?, ?)
+        """, (hostname, now_iso, p_desc, p.get('name', '')))
 
     for c in data.get('connections', [])[:15]:
         c_desc = f"{c.get('proto', 'TCP')} | Remote: {c.get('remote', '-')} | State: {c.get('state', '-')} | PID: {c.get('pid', '-')}"
+        remote_ip = c.get('remote', '').split(':')[0] if ':' in c.get('remote', '') else ''
         conn.execute("""
-            INSERT INTO telemetry_logs (hostname, timestamp, log_type, details)
-            VALUES (?, ?, 'NETWORK_CONN', ?)
-        """, (hostname, now_iso, c_desc))
+            INSERT INTO telemetry_logs (hostname, timestamp, log_type, details, src_ip)
+            VALUES (?, ?, 'NETWORK_CONN', ?, ?)
+        """, (hostname, now_iso, c_desc, remote_ip))
+
+    # 3. Process structured security audit events (OCSF/ECS compliant)
+    SUSPICIOUS_CLI = ['mimikatz', 'invoke-', 'downloadstring', '-enc ', 'bypass', 'iex ', 'net user', 'whoami /priv']
+    user_seen = None
 
     for ev in data.get('events', []):
-        raw_snippet = str(ev.get('raw', ''))[:250].replace('\n', ' ')
-        e_desc = f"Rule: {ev.get('rule', 'Auth Failure')} | ID: {ev.get('event_id', 4625)} | {raw_snippet}"
-        conn.execute("""
-            INSERT INTO telemetry_logs (hostname, timestamp, log_type, details)
-            VALUES (?, ?, 'SECURITY_EVENT', ?)
-        """, (hostname, now_iso, e_desc))
-        
-        # Trigger an alert on the dashboard with device_name
-        conn.execute("""
-            INSERT INTO alerts (timestamp, severity, rule_name, description, src_ip, src_user, device_name, process, event_id, mitre_tactic, mitre_technique, raw_event, status)
-            VALUES (?, 'MEDIUM', 'Remote Endpoint Failed Login', ?, ?, ?, ?, 'winlogon.exe', 4625, 'Credential Access', 'T1110 - Brute Force', ?, 'OPEN')
-        """, (now_iso, f"Logon failure on {hostname}", ip_addr, hostname, hostname, raw_snippet))
+        eid = ev.get('event_id')
+        user = ev.get('user') or ''
+        if user and not user_seen:
+            user_seen = user
+        src_ip = ev.get('src_ip') or ip_addr
+        proc = ev.get('process') or ''
+        cmdline = ev.get('command_line') or ''
+        sev = ev.get('severity', 'LOW')
+        rname = ev.get('rule_name', 'Security Event')
+        tactic = ev.get('mitre_tactic', 'Execution')
+        technique = ev.get('mitre_technique', 'T1059 - Command Execution')
+        details = ev.get('details') or f"Event {eid} on {hostname}"
+        raw_json_str = json.dumps(ev)
 
-    # 3. Check for suspicious processes
+        # Store into telemetry_logs with structured columns
+        conn.execute("""
+            INSERT INTO telemetry_logs (hostname, timestamp, log_type, details, event_id, user_name, src_ip, process_name, raw_json)
+            VALUES (?, ?, 'SECURITY_EVENT', ?, ?, ?, ?, ?, ?)
+        """, (hostname, now_iso, details, eid, user, src_ip, proc, raw_json_str))
+
+        # Actionable security alerts triage
+        should_alert = False
+        alert_reason = details
+
+        if eid == 4625:
+            should_alert = True
+            rname = "Windows Logon Failure"
+            sev = "MEDIUM"
+            tactic = "Credential Access"
+            technique = "T1110 - Brute Force"
+        elif eid in [4720, 4732, 4698]:
+            should_alert = True
+            sev = "HIGH"
+        elif eid == 4104:
+            if any(term in cmdline.lower() for term in SUSPICIOUS_CLI):
+                should_alert = True
+                rname = "Suspicious PowerShell Script Block"
+                sev = "HIGH"
+                tactic = "Execution"
+                technique = "T1059.001 - PowerShell"
+                alert_reason = f"Suspicious script block executed: {cmdline[:120]}"
+        elif sev in ['HIGH', 'CRITICAL']:
+            should_alert = True
+
+        if should_alert:
+            conn.execute("""
+                INSERT INTO alerts (timestamp, severity, rule_name, description, src_ip, src_user, device_name, process, event_id, mitre_tactic, mitre_technique, raw_event, status)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'OPEN')
+            """, (now_iso, sev, rname, alert_reason, src_ip, user or hostname, hostname, proc or 'powershell.exe', eid, tactic, technique, raw_json_str))
+
+    # 4. Check for suspicious running processes
     SUSPICIOUS_NAMES = ['mimikatz.exe', 'nc.exe', 'ncat.exe', 'psexec.exe', 'wireshark.exe']
     for p in data.get('processes', []):
         pname = p.get('name', '').lower()
@@ -417,15 +461,63 @@ def receive_telemetry():
             conn.execute("""
                 INSERT INTO alerts (timestamp, severity, rule_name, description, src_ip, src_user, device_name, process, event_id, mitre_tactic, mitre_technique, raw_event, status)
                 VALUES (?, 'HIGH', 'Suspicious Tool on Remote Endpoint', ?, ?, ?, ?, ?, 1, 'Execution', 'T1059 - Command Execution', ?, 'OPEN')
-            """, (now_iso, f"Suspicious binary {pname} running on {hostname}", ip_addr, hostname, hostname, pname, str(p)))
+            """, (now_iso, f"Suspicious binary {pname} running on {hostname}", ip_addr, hostname, hostname, pname, json.dumps(p)))
 
     conn.commit()
     conn.close()
+
+    # 5. Dynamic UEBA Behavioral Risk Scoring
+    calculate_entity_risk(hostname, "HOST")
+    if user_seen:
+        calculate_entity_risk(user_seen, "USER")
 
     res = {'status': 'acknowledged', 'node': hostname}
     if cmd_to_send:
         res['command'] = cmd_to_send
     return jsonify(res)
+
+# ── Cloud & Syslog Ingestion Webhook (AWS/GCP/Azure/Syslog) ──
+@app.route('/api/v1/ingest/cloud', methods=['POST'])
+def ingest_cloud():
+    """
+    Cloud-ready webhook endpoint for AWS CloudTrail, GCP Audit, Azure Monitor, or Syslog JSON payloads.
+    """
+    payload = request.get_json(force=True, silent=True) or {}
+    events = payload.get('events', [payload] if ('event' in payload or 'rule_name' in payload or 'eventName' in payload) else [])
+    
+    conn = get_conn()
+    now_iso = datetime.now().isoformat()
+    ingested = 0
+    for ev in events:
+        host = ev.get('host', ev.get('recipientAccountId', 'cloud-env'))
+        user = ev.get('user', ev.get('userIdentity', {}).get('userName', 'cloud-user'))
+        rname = ev.get('rule_name', ev.get('eventName', 'Cloud Security Event'))
+        tactic = ev.get('mitre_tactic', 'Initial Access')
+        technique = ev.get('mitre_technique', 'T1078 - Cloud Accounts')
+        desc = ev.get('details', f"Cloud event {rname} on {host} by {user}")
+        eid = ev.get('event_id', 9001)
+        sev = ev.get('severity', 'MEDIUM')
+        
+        conn.execute("""
+            INSERT INTO telemetry_logs (hostname, timestamp, log_type, details, event_id, user_name, src_ip, process_name, raw_json)
+            VALUES (?, ?, 'CLOUD_AUDIT', ?, ?, ?, ?, 'cloud', ?)
+        """, (host, now_iso, desc, eid, user, ev.get('src_ip', '0.0.0.0'), json.dumps(ev)))
+        
+        if sev in ['MEDIUM', 'HIGH', 'CRITICAL']:
+            conn.execute("""
+                INSERT INTO alerts (timestamp, severity, rule_name, description, src_ip, src_user, device_name, process, event_id, mitre_tactic, mitre_technique, raw_event, status)
+                VALUES (?, ?, ?, ?, ?, ?, ?, 'cloud', ?, ?, ?, ?, 'OPEN')
+            """, (now_iso, sev, rname, desc, ev.get('src_ip', '0.0.0.0'), user, host, eid, tactic, technique, json.dumps(ev)))
+            
+        ingested += 1
+    conn.commit()
+    conn.close()
+    return jsonify({"status": "success", "ingested": ingested})
+
+# ── UEBA Top Risky Entities API ───────────────────────────────
+@app.route('/api/ueba/top')
+def api_ueba_top():
+    return jsonify(get_top_risky_entities(limit=10))
 
 @app.route('/api/agents/<hostname>/isolate', methods=['POST'])
 def isolate_agent(hostname):

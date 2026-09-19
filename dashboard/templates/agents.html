@@ -28,6 +28,7 @@
             <th>Agent Version</th>
             <th>Last Heartbeat</th>
             <th>Containment Status</th>
+            <th>UEBA Risk</th>
             <th>Live Telemetry &amp; Actions</th>
           </tr>
         </thead>
@@ -45,6 +46,17 @@
               <span class="badge bg-danger">🚨 ISOLATED</span>
               {% else %}
               <span class="badge bg-success">ONLINE</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if ep.risk_score >= 70 %}
+              <span class="badge bg-danger">{{ ep.risk_score }}/100 CRITICAL</span>
+              {% elif ep.risk_score >= 40 %}
+              <span class="badge bg-warning text-dark">{{ ep.risk_score }}/100 HIGH</span>
+              {% elif ep.risk_score >= 20 %}
+              <span class="badge bg-info text-dark">{{ ep.risk_score }}/100 MED</span>
+              {% else %}
+              <span class="badge bg-success">{{ ep.risk_score|default(0, true) }}/100 LOW</span>
               {% endif %}
             </td>
             <td>
@@ -138,12 +150,15 @@
               <table class="table table-sm table-dark mb-0">
                 <thead>
                   <tr>
-                    <th>Timestamp</th>
-                    <th>Event Details (Event ID 4625 / Auth Logs)</th>
+                    <th>Time</th>
+                    <th>Event ID</th>
+                    <th>User</th>
+                    <th>Source IP</th>
+                    <th>Forensic Audit Details</th>
                   </tr>
                 </thead>
                 <tbody id="secLogBody">
-                  <tr><td colspan="2" class="text-center text-muted">No authentication failures recorded on this host yet.</td></tr>
+                  <tr><td colspan="5" class="text-center text-muted">No security events recorded on this host yet.</td></tr>
                 </tbody>
               </table>
             </div>
@@ -220,17 +235,32 @@ function fetchLogs(hostname) {
         connBody.innerHTML = '<tr><td colspan="2" class="text-center text-muted py-3">No active network sockets recorded yet.</td></tr>';
       }
 
-      // 3. Security Events
+      // 3. Security Events (Structured OCSF Display)
       const secBody = document.getElementById('secLogBody');
       if (data.events && data.events.length > 0) {
-        secBody.innerHTML = data.events.map(e => `
-          <tr>
-            <td class="text-muted small font-monospace" style="width:170px;">${e.timestamp.substring(11, 19)}</td>
-            <td class="small text-danger">${e.details}</td>
-          </tr>
-        `).join('');
+        secBody.innerHTML = data.events.map(e => {
+          let badgeClass = 'bg-secondary';
+          if (e.event_id === 4625) badgeClass = 'bg-danger';
+          else if (e.event_id === 4624) badgeClass = 'bg-info text-dark';
+          else if (e.event_id === 4104) badgeClass = 'bg-warning text-dark';
+          else if (e.event_id === 4720 || e.event_id === 4732) badgeClass = 'bg-danger';
+
+          const eidBadge = e.event_id ? `<span class="badge ${badgeClass}">ID ${e.event_id}</span>` : '<span class="badge bg-secondary">AUDIT</span>';
+          const userStr = e.user_name || '-';
+          const ipStr = e.src_ip || '-';
+
+          return `
+            <tr>
+              <td class="text-muted small font-monospace" style="width:90px;">${(e.timestamp || '').substring(11, 19)}</td>
+              <td style="width:90px;">${eidBadge}</td>
+              <td class="font-monospace small text-info" style="width:110px;">${userStr}</td>
+              <td class="font-monospace small text-warning" style="width:110px;">${ipStr}</td>
+              <td class="small text-light">${e.details}</td>
+            </tr>
+          `;
+        }).join('');
       } else {
-        secBody.innerHTML = '<tr><td colspan="2" class="text-center text-muted py-3">No authentication failures reported. All login states nominal.</td></tr>';
+        secBody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-3">No security events recorded on this host yet.</td></tr>';
       }
     })
     .catch(err => {
