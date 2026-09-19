@@ -1,9 +1,9 @@
-import os, sys, yaml
+import os, sys, yaml, io, csv
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
 
-from flask import Flask, render_template, jsonify, request, redirect, url_for, send_file
+from flask import Flask, render_template, jsonify, request, redirect, url_for, send_file, Response
 from database.models import get_conn, init_db
 from datetime import datetime
 from reports.ir_generator import generate_pdf_report
@@ -74,13 +74,86 @@ def alerts():
     return render_template('alerts.html', alerts=rows, severity=sev,
                            devices=devices, current_device=device)
 
-# ── Alert API ─────────────────────────────────────────────────
-@app.route('/api/alerts')
-def api_alerts():
-    conn = get_conn()
-    rows = conn.execute('SELECT * FROM alerts ORDER BY id DESC LIMIT 50').fetchall()
+@app.route('/api/alerts/export')
+def export_alerts_csv():
+    device = request.args.get('device', '')
+    conn   = get_conn()
+    query  = 'SELECT * FROM alerts WHERE 1=1'
+    params = []
+    if device:
+        query += ' AND device_name=?'
+        params.append(device)
+    query += ' ORDER BY id DESC'
+    rows = conn.execute(query, params).fetchall()
     conn.close()
-    return jsonify([dict(r) for r in rows])
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(['ID', 'Timestamp', 'Device', 'Severity', 'Rule Name', 'MITRE Technique', 'Target User', 'Source IP', 'VT Score', 'Abuse Score', 'Status', 'Description'])
+    
+    for r in rows:
+        writer.writerow([
+            r['id'], r['timestamp'], r['device_name'] or 'Localhost',
+            r['severity'], r['rule_name'], r['mitre_technique'] or 'N/A',
+            r['src_user'] or '-', r['src_ip'] or '-', r['vt_score'] or '-',
+            r['abuse_score'] if r['abuse_score'] is not None else '-',
+            r['status'], r['description'] or ''
+        ])
+    
+    filename = f"MiniSOC_Alerts_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+    return Response(
+        output.getvalue(),
+        mimetype="text/csv",
+        headers={"Content-Disposition": f"attachment;filename={filename}"}
+    )
+
+# ── Threat Hunting Console ────────────────────────────────────
+@app.route('/hunting')
+def hunting_view():
+    return render_template('hunting.html')
+
+@app.route('/api/hunting/run')
+def api_hunting_run():
+    htype = request.args.get('type', 'lolbins')
+    start_t = datetime.now()
+    conn = get_conn()
+
+    results = []
+    playbook_name = "Custom Hunt"
+
+    if htype == 'lolbins':
+        playbook_name = "LOLBins & Script Interpreters (T1059)"
+        targets = ['powershell', 'certutil', 'cmd.exe', 'mshta', 'wscript', 'cscript', 'bitsadmin']
+        clause = " OR ".join(["LOWER(details) LIKE ?" for _ in targets])
+        params = [f"%{t}%" for t in targets]
+        results = conn.execute(f"SELECT * FROM telemetry_logs WHERE log_type='PROCESS' AND ({clause}) ORDER BY id DESC LIMIT 50", params).fetchall()
+
+    elif htype == 'suspicious_ports':
+        playbook_name = "Anomalous Outbound Ports (T1071)"
+        ports = [':4444', ':1337', ':8888', ':7070', ':9001', ':6667', ':31337']
+        clause = " OR ".join(["details LIKE ?" for _ in ports])
+        params = [f"%{p}%" for p in ports]
+        results = conn.execute(f"SELECT * FROM telemetry_logs WHERE log_type='NETWORK_CONN' AND ({clause}) ORDER BY id DESC LIMIT 50", params).fetchall()
+
+    elif htype == 'recon':
+        playbook_name = "Host & Network Reconnaissance (T1087 / T1082)"
+        tools = ['whoami', 'net user', 'net group', 'tasklist', 'ipconfig', 'nltest', 'systeminfo']
+        clause = " OR ".join(["LOWER(details) LIKE ?" for _ in targets if targets] if 'targets' in locals() else ["LOWER(details) LIKE ?" for _ in tools])
+        params = [f"%{t}%" for t in tools]
+        results = conn.execute(f"SELECT * FROM telemetry_logs WHERE ({clause}) ORDER BY id DESC LIMIT 50", params).fetchall()
+
+    elif htype == 'auth':
+        playbook_name = "Cross-Host Authentication Anomalies (T1110)"
+        results = conn.execute("SELECT * FROM telemetry_logs WHERE log_type='SECURITY_EVENT' OR details LIKE '%4625%' ORDER BY id DESC LIMIT 50").fetchall()
+
+    conn.close()
+    duration = int((datetime.now() - start_t).total_seconds() * 1000)
+
+    return jsonify({
+        'playbook_name': playbook_name,
+        'duration_ms': duration,
+        'results': [dict(r) for r in results]
+    })
 
 # ── Escalate Alert to Incident ────────────────────────────────
 @app.route('/api/alert/<int:aid>/escalate', methods=['POST'])
@@ -106,7 +179,6 @@ def escalate_alert(aid):
     """, (title, alert['severity'], datetime.now().isoformat(), datetime.now().isoformat(), summary))
     new_id = cur.lastrowid
 
-    # Mark alert as closed (investigated)
     conn.execute("UPDATE alerts SET status='CLOSED' WHERE id=?", (aid,))
     conn.commit()
     conn.close()

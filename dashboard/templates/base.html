@@ -44,7 +44,7 @@
       color: #f8fafc !important;
     }
     
-    /* Strict Table Styling Overrides to prevent white table backgrounds */
+    /* Strict Table Styling Overrides */
     .table {
       --bs-table-bg: #0f172a !important;
       --bs-table-striped-bg: #131d31 !important;
@@ -159,6 +159,7 @@
       <div class="navbar-nav ms-auto">
         <a class="nav-link {% if request.endpoint=='index' %}active{% endif %}" href="/">Dashboard</a>
         <a class="nav-link {% if request.endpoint=='alerts' %}active{% endif %}" href="/alerts">Alerts</a>
+        <a class="nav-link {% if request.endpoint=='hunting_view' %}active{% endif %}" href="/hunting">🎯 Hunting</a>
         <a class="nav-link {% if request.endpoint=='incidents' %}active{% endif %}" href="/incidents">Incidents</a>
         <a class="nav-link {% if request.endpoint=='network_view' %}active{% endif %}" href="/network">Network (NSM/IPS)</a>
         <a class="nav-link {% if request.endpoint=='agents_view' %}active{% endif %}" href="/agents">Endpoints</a>

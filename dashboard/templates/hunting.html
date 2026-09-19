@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+{% block title %}Threat Hunting Console{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h4 class="mb-0 text-info fw-bold">🎯 Threat Hunting &amp; Proactive Anomaly Discovery</h4>
+    <span class="text-muted small">Execute cross-endpoint hunting playbooks across live telemetry logs without waiting for static alerts</span>
+  </div>
+  <div>
+    <span class="badge bg-primary">Hypothesis-Driven Hunting (MITRE ATT&amp;CK)</span>
+  </div>
+</div>
+
+<!-- Pre-Built Hunting Playbooks -->
+<div class="row g-3 mb-4">
+  <!-- Playbook 1: LOLBins -->
+  <div class="col-md-3">
+    <div class="card h-100 border-warning">
+      <div class="card-body">
+        <div class="text-warning small text-uppercase fw-bold mb-1">Playbook #1 • Execution</div>
+        <h6 class="fw-bold text-light">LOLBins &amp; Script Interpreters</h6>
+        <p class="small text-muted mb-3">Hunts for living-off-the-land binaries: <code>powershell.exe</code>, <code>certutil.exe</code>, <code>mshta.exe</code>, <code>wscript.exe</code>.</p>
+        <button class="btn btn-sm btn-outline-warning w-100" onclick="runHunt('lolbins')">Run Hunt Query</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Playbook 2: Suspicious Ports -->
+  <div class="col-md-3">
+    <div class="card h-100 border-danger">
+      <div class="card-body">
+        <div class="text-danger small text-uppercase fw-bold mb-1">Playbook #2 • Command &amp; Control</div>
+        <h6 class="fw-bold text-light">Anomalous Outbound Ports</h6>
+        <p class="small text-muted mb-3">Detects sockets bound to non-standard remote ports: <code>4444</code> (Metasploit), <code>1337</code>, <code>8888</code>, <code>7070</code>.</p>
+        <button class="btn btn-sm btn-outline-danger w-100" onclick="runHunt('suspicious_ports')">Run Hunt Query</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Playbook 3: Reconnaissance -->
+  <div class="col-md-3">
+    <div class="card h-100 border-info">
+      <div class="card-body">
+        <div class="text-info small text-uppercase fw-bold mb-1">Playbook #3 • Discovery</div>
+        <h6 class="fw-bold text-light">Host Reconnaissance</h6>
+        <p class="small text-muted mb-3">Identifies discovery commands: <code>whoami</code>, <code>net user</code>, <code>tasklist</code>, <code>ipconfig</code>.</p>
+        <button class="btn btn-sm btn-outline-info w-100" onclick="runHunt('recon')">Run Hunt Query</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Playbook 4: Auth Anomalies -->
+  <div class="col-md-3">
+    <div class="card h-100 border-success">
+      <div class="card-body">
+        <div class="text-success small text-uppercase fw-bold mb-1">Playbook #4 • Credential Access</div>
+        <h6 class="fw-bold text-light">Authentication Anomalies</h6>
+        <p class="small text-muted mb-3">Aggregates all Event ID 4625 failed logons across all enrolled workstations.</p>
+        <button class="btn btn-sm btn-outline-success w-100" onclick="runHunt('auth')">Run Hunt Query</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Hunting Results Console -->
+<div class="card">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <span><strong>Active Hunt Findings</strong> (<span id="huntCount" class="text-info fw-bold">0</span> results)</span>
+    <span id="huntStatus" class="small text-muted">Select a playbook above to search all endpoint logs.</span>
+  </div>
+  <div class="card-body p-0">
+    <div class="table-responsive" style="min-height: 250px;">
+      <table class="table table-sm table-dark table-hover mb-0" id="huntTable">
+        <thead>
+          <tr>
+            <th>Timestamp</th>
+            <th>Target Device</th>
+            <th>Telemetry Category</th>
+            <th>Observable Match Details</th>
+          </tr>
+        </thead>
+        <tbody id="huntBody">
+          <tr>
+            <td colspan="4" class="text-center text-muted py-5">
+              No active hunt running. Click any playbook above to scan across all communicating laptops.
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function runHunt(type) {
+  const status = document.getElementById('huntStatus');
+  const count = document.getElementById('huntCount');
+  const body = document.getElementById('huntBody');
+
+  status.innerHTML = '<span class="text-info spinner-border spinner-border-sm"></span> Scanning live endpoint telemetry tables...';
+  body.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-5">Querying cross-host telemetry database...</td></tr>';
+
+  fetch('/api/hunting/run?type=' + encodeURIComponent(type))
+    .then(r => r.json())
+    .then(data => {
+      count.textContent = data.results.length;
+      status.textContent = `Completed in ${data.duration_ms}ms • Playbook: ${data.playbook_name}`;
+
+      if (data.results.length === 0) {
+        body.innerHTML = `<tr><td colspan="4" class="text-center text-success py-5">✅ Hunt complete: Zero malicious indicators found for '${data.playbook_name}'.</td></tr>`;
+        return;
+      }
+
+      body.innerHTML = data.results.map(r => `
+        <tr>
+          <td class="text-muted small font-monospace" style="width: 170px;">${r.timestamp.substring(0, 19)}</td>
+          <td style="width: 180px;">
+            <span class="badge bg-black border border-info text-info font-monospace py-1 px-2">
+              💻 ${r.hostname}
+            </span>
+          </td>
+          <td style="width: 150px;"><span class="badge bg-secondary">${r.log_type}</span></td>
+          <td class="small font-monospace text-light">${r.details}</td>
+        </tr>
+      `).join('');
+    })
+    .catch(err => {
+      status.textContent = 'Query failed';
+      body.innerHTML = `<tr><td colspan="4" class="text-danger py-4 text-center">Error executing hunt: ${err}</td></tr>`;
+    });
+}
+</script>
+{% endblock %}
