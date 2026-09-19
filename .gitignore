@@ -24,3 +24,5 @@ PSLogs/
 Thumbs.db
 *.metadata.json
 reports_generated/
+ngrok.exe
+ngrok.zip
