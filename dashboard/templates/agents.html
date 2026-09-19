@@ -1,74 +1,122 @@
 {% extends "base.html" %}
-{% block title %}Endpoint Agent Fleet{% endblock %}
+{% block title %}Endpoint Agent Fleet &amp; EDR{% endblock %}
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
   <div>
-    <h4 class="mb-0 text-info">Distributed Endpoint Agent Fleet</h4>
-    <span class="text-muted small">Real-time status of cross-platform monitoring agents streaming telemetry to MiniSOC</span>
+    <h4 class="mb-0 text-info">Distributed Endpoint Fleet &amp; Host Isolation (EDR)</h4>
+    <span class="text-muted small">Live status, log telemetry streaming &amp; active host network containment</span>
   </div>
   <div>
-    <span class="badge bg-success">{{ endpoints|length }} Active Agent(s)</span>
+    <span class="badge bg-success fs-6">{{ endpoints|length }} Enrolled Node(s)</span>
   </div>
 </div>
 
 <div class="card mb-4">
-  <div class="card-header bg-dark text-light border-secondary">
-    <strong>📋 Enrolled Host Endpoints</strong>
+  <div class="card-header bg-dark text-light border-secondary d-flex justify-content-between align-items-center">
+    <strong>📋 Managed Endpoints</strong>
+    <span class="text-muted small">Auto-refreshes on agent heartbeats (15s)</span>
   </div>
   <div class="card-body p-0">
-    <table class="table table-sm mb-0">
-      <thead>
-        <tr>
-          <th>Hostname</th>
-          <th>IP Address</th>
-          <th>Operating System</th>
-          <th>Architecture</th>
-          <th>Agent Version</th>
-          <th>Last Heartbeat</th>
-          <th>Status</th>
-          <th>Host Actions</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for ep in endpoints %}
-        <tr>
-          <td class="fw-bold text-light">{{ ep.hostname }}</td>
-          <td class="font-monospace text-warning">{{ ep.ip_address }}</td>
-          <td>{{ ep.os }}</td>
-          <td class="text-muted small">{{ ep.architecture }}</td>
-          <td><span class="badge bg-info">v{{ ep.agent_version }}</span></td>
-          <td class="text-muted small">{{ ep.last_heartbeat[:19] }}</td>
-          <td>
-            <span class="badge bg-success">{{ ep.status }}</span>
-          </td>
-          <td>
-            <button class="btn btn-outline-danger btn-enrich" onclick="alert('Host containment order queued for {{ ep.hostname }}.')">Isolate Host</button>
-          </td>
-        </tr>
-        {% else %}
-        <tr>
-          <td colspan="8" class="text-center text-muted py-4">
-            No remote agents enrolled yet.<br/>
-            <span class="small">Deploy an agent by executing: <code>python agent/endpoint_agent.py http://{{ server_ip }}:5000/api/v1/telemetry</code></span>
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-</div>
-
-<!-- Deployment Runbook Snippet -->
-<div class="card">
-  <div class="card-header bg-dark text-light border-secondary">
-    <strong>🚀 Agent Deployment Quickstart</strong>
-  </div>
-  <div class="card-body">
-    <p class="small text-muted mb-2">To enroll a new workstation or server into your MiniSOC cluster, copy the standalone agent script to the target node and start the background telemetry daemon:</p>
-    <div class="bg-black p-3 rounded font-monospace small text-success">
-      # Run locally or on any remote Windows / Linux endpoint:<br/>
-      python agent/endpoint_agent.py http://127.0.0.1:5000/api/v1/telemetry
+    <div class="table-responsive">
+      <table class="table table-sm mb-0">
+        <thead>
+          <tr>
+            <th>Hostname</th>
+            <th>IP Address</th>
+            <th>Operating System</th>
+            <th>Architecture</th>
+            <th>Agent Version</th>
+            <th>Last Heartbeat</th>
+            <th>Containment Status</th>
+            <th>EDR Quarantine Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for ep in endpoints %}
+          <tr id="ep-row-{{ ep.hostname }}">
+            <td class="fw-bold text-light">{{ ep.hostname }}</td>
+            <td class="font-monospace text-warning">{{ ep.ip_address }}</td>
+            <td>{{ ep.os }}</td>
+            <td class="text-muted small">{{ ep.architecture }}</td>
+            <td><span class="badge bg-info">v{{ ep.agent_version }}</span></td>
+            <td class="text-muted small">{{ ep.last_heartbeat[:19] }}</td>
+            <td>
+              {% if ep.status == 'ISOLATED' %}
+              <span class="badge bg-danger">🚨 ISOLATED</span>
+              {% else %}
+              <span class="badge bg-success">ONLINE</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if ep.status == 'ISOLATED' %}
+              <button class="btn btn-sm btn-success btn-enrich py-1" onclick="restoreHost('{{ ep.hostname }}')">
+                🔓 Restore Network
+              </button>
+              {% else %}
+              <button class="btn btn-sm btn-danger btn-enrich py-1" onclick="isolateHost('{{ ep.hostname }}')">
+                🛡️ Isolate Host
+              </button>
+              {% endif %}
+            </td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="8" class="text-center text-muted py-4">
+              No remote agents enrolled yet.<br/>
+              <span class="small">Deploy on your friend's laptop: <code>python endpoint_agent.py</code></span>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
     </div>
   </div>
 </div>
+
+<!-- Deployment Runbook -->
+<div class="card">
+  <div class="card-header bg-dark text-light border-secondary">
+    <strong>🚀 Quick Agent Deployment on Friend's Laptop</strong>
+  </div>
+  <div class="card-body">
+    <p class="small text-muted mb-2">Send <code>agent/endpoint_agent.py</code> to your friend or have them clone your GitHub. Run in PowerShell or Terminal:</p>
+    <div class="bg-black p-3 rounded font-monospace small text-success">
+      # Runs with zero external libraries on any Windows, Linux, or Mac computer:<br/>
+      python endpoint_agent.py
+    </div>
+    <div class="small text-muted mt-2">
+      <strong>How Isolation Works:</strong> Clicking <em>Isolate Host</em> queues an instruction. Within 15 seconds, the agent adds an outbound block rule to the remote firewall, severing malicious lateral movement and data exfiltration while keeping the MiniSOC telemetry channel alive!
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function isolateHost(hostname) {
+  if (!confirm(`WARNING: Are you sure you want to isolate '${hostname}' from the network?\n\nThis will enforce outbound firewall drops on the target machine.`)) {
+    return;
+  }
+  fetch(`/api/agents/${encodeURIComponent(hostname)}/isolate`, {method: 'POST'})
+    .then(r => r.json())
+    .then(d => {
+      alert(`[+] Host Containment Ordered!\n\nTarget: ${hostname}\nAction: Outbound network drop will be applied on the next heartbeat (within 15s).`);
+      location.reload();
+    })
+    .catch(e => alert("Error: " + e));
+}
+
+function restoreHost(hostname) {
+  if (!confirm(`Restore full network connectivity for '${hostname}'?`)) {
+    return;
+  }
+  fetch(`/api/agents/${encodeURIComponent(hostname)}/unisolate`, {method: 'POST'})
+    .then(r => r.json())
+    .then(d => {
+      alert(`[+] Network Access Restored!\n\nTarget: ${hostname}\nAction: Quarantine firewall rules will be removed on next heartbeat.`);
+      location.reload();
+    })
+    .catch(e => alert("Error: " + e));
+}
+</script>
 {% endblock %}

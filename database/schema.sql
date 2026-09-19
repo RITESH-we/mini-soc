@@ -68,5 +68,6 @@ CREATE TABLE IF NOT EXISTS endpoints (
     architecture    TEXT,
     agent_version   TEXT,
     last_heartbeat  TEXT,
-    status          TEXT DEFAULT 'ONLINE'
+    status          TEXT DEFAULT 'ONLINE',
+    pending_command TEXT DEFAULT NULL
 );
