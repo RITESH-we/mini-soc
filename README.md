@@ -82,6 +82,7 @@ It was engineered by identifying the foundational architectural bottlenecks, pro
 - Querying Windows Event Log via `/f:xml` using standard library `xml.etree.ElementTree` (zero third-party dependencies).
 - Extracts exact security fields: **`EventID`**, **`TargetUserName`**, **`IpAddress`**, **`LogonType`**, **`Status`**, **`SubStatus`**, **`CommandLine`**, and **`ParentProcessName`**.
 - **High-Watermark State Tracking**: Persists `EventRecordID` in `.agent_state.json`, eliminating duplicate alerts on subsequent heartbeats.
+- **Persistent Auto-Start Daemon**: Survives system reboots and power-offs. Features dual-tier auto-start on Windows (zero-privilege headless VBS startup runner + elevated Windows Task Scheduler) and native `systemd` service management on Linux with automatic failure recovery.
 
 ### 2. Behavioral UEBA Risk Engine (Exabeam & Securonix Inspiration)
 - Computes real-time dynamic risk scores (0–100) for both **Hosts** and **Users**.
@@ -130,11 +131,40 @@ venv\Scripts\activate
 python dashboard/app.py
 # Access Web Console at: http://127.0.0.1:5000
 
-# 2. Deploy Endpoint Telemetry Agent on any machine
+# 2. Deploy Endpoint Telemetry Agent (Interactive Debug Mode)
 python agent/endpoint_agent.py http://127.0.0.1:5000/api/v1/telemetry
 ```
 
-### Option B: Cloud & Container Deployment (Docker)
+### Option B: Persistent Endpoint Agent Deployment (Survives Reboots)
+
+Deploy the agent once on monitored laptops/servers — it automatically runs silently in the background on every power-on without requiring manual intervention:
+
+#### Windows (1-Click or CLI):
+```powershell
+# Automated 1-Click Install:
+Double-click agent\install_windows.bat
+
+# Or run via PowerShell / CMD:
+python agent/endpoint_agent.py --install http://YOUR_SERVER_IP:5000/api/v1/telemetry
+
+# Check service status or remove:
+python agent/endpoint_agent.py --status
+python agent/endpoint_agent.py --uninstall
+```
+
+#### Linux (Systemd Service):
+```bash
+# Automated 1-Click Install:
+sudo bash agent/install_linux.sh http://YOUR_SERVER_IP:5000/api/v1/telemetry
+
+# Or run via Python:
+sudo python3 agent/endpoint_agent.py --install http://YOUR_SERVER_IP:5000/api/v1/telemetry
+
+# Inspect daemon status:
+systemctl status minisoc-agent.service
+```
+
+### Option C: Cloud & Container Deployment (Docker)
 
 ```bash
 # 1-Click Multi-Container Launch

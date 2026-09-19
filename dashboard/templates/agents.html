@@ -175,13 +175,29 @@
 
 <!-- Deployment Runbook -->
 <div class="card">
-  <div class="card-header bg-dark text-light border-secondary">
-    <strong>🚀 Endpoint Agent Deployment</strong>
+  <div class="card-header bg-dark text-light border-secondary d-flex justify-content-between align-items-center">
+    <span><strong>🚀 Endpoint Agent Deployment &amp; Persistence</strong></span>
+    <span class="badge bg-success">Cross-Platform (Windows &amp; Linux)</span>
   </div>
   <div class="card-body">
-    <p class="small text-muted mb-2">Run this single command on any remote Windows, Linux, or Mac laptop to start shipping live logs to your MiniSOC dashboard:</p>
-    <div class="bg-black p-3 rounded font-monospace small text-success">
-      python endpoint_agent.py
+    <div class="row g-3">
+      <div class="col-md-6">
+        <h6 class="small text-info fw-bold mb-1">⚡ Option 1: One-Click Persistent Service (Auto-Starts on Reboot)</h6>
+        <p class="small text-muted mb-2">Installs as a background service/startup runner. Runs silently in the background without needing to be started again after laptop power-off:</p>
+        <div class="bg-black p-2 rounded font-monospace small text-success border border-secondary mb-2">
+          python endpoint_agent.py --install
+        </div>
+        <span class="text-muted" style="font-size:0.75rem;">To uninstall: <code>python endpoint_agent.py --uninstall</code></span>
+      </div>
+      
+      <div class="col-md-6">
+        <h6 class="small text-warning fw-bold mb-1">▶️ Option 2: Interactive Terminal Mode</h6>
+        <p class="small text-muted mb-2">Run directly in an open console for interactive testing and real-time terminal stdout debugging:</p>
+        <div class="bg-black p-2 rounded font-monospace small text-warning border border-secondary mb-2">
+          python endpoint_agent.py
+        </div>
+        <span class="text-muted" style="font-size:0.75rem;">Ships processes, socket connections, and Windows audit logs every 15s.</span>
+      </div>
     </div>
   </div>
 </div>

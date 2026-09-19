@@ -409,6 +409,158 @@ def run_agent(server_url=DEFAULT_SERVER, interval=15):
             print(f"[{now_str}] [-] Heartbeat delivery failed: {msg}")
         time.sleep(interval)
 
+def install_service(server_url=DEFAULT_SERVER):
+    server_url = normalize_server_url(server_url)
+    system = platform.system()
+    script_path = os.path.abspath(__file__)
+    py_exe = sys.executable
+
+    print("[*] Installing MiniSOC Endpoint Agent as a persistent system service...")
+
+    if system == "Windows":
+        pyw_exe = os.path.join(os.path.dirname(py_exe), "pythonw.exe")
+        runner = pyw_exe if os.path.exists(pyw_exe) else py_exe
+
+        task_name = "MiniSOC_Endpoint_Agent"
+        cmd_to_run = f'"{runner}" "{script_path}" "{server_url}"'
+
+        # 1. First, attempt Windows Task Scheduler (ideal if running as Administrator)
+        create_cmd = [
+            "schtasks", "/Create",
+            "/TN", task_name,
+            "/TR", cmd_to_run,
+            "/SC", "ONLOGON",
+            "/RL", "HIGHEST",
+            "/F"
+        ]
+        res = subprocess.run(create_cmd, capture_output=True, text=True)
+        if res.returncode == 0:
+            print(f"[+] Successfully registered '{task_name}' in Windows Task Scheduler.")
+            print("[+] Trigger: Automatic startup with HIGHEST privileges on user logon / boot.")
+            subprocess.run(["schtasks", "/Run", "/TN", task_name], capture_output=True)
+            print("[+] MiniSOC Agent is now running persistently in the background!")
+            print("[+] You do NOT need to restart it after rebooting or powering off.")
+            return True
+
+        # 2. Fallback: Install into User Startup Folder (Works 100% without Administrator rights!)
+        try:
+            startup_dir = os.path.join(os.environ.get('APPDATA', ''), 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup')
+            if os.path.exists(startup_dir):
+                vbs_path = os.path.join(startup_dir, "minisoc_agent.vbs")
+                vbs_content = f'Set WshShell = CreateObject("WScript.Shell")\r\nWshShell.Run """{runner}"" ""{script_path}"" ""{server_url}""", 0, False\r\n'
+                with open(vbs_path, "w") as f:
+                    f.write(vbs_content)
+                
+                print(f"[+] Successfully registered persistent background runner in Windows Startup:")
+                print(f"    -> {vbs_path}")
+                print("[+] Runs silently in background on every reboot / power-on without showing any black window.")
+                subprocess.Popen(["wscript.exe", vbs_path])
+                print("[+] MiniSOC Agent launched successfully and active in background!")
+                print("[+] Auto-start is fully configured. You never need to run it again manually.")
+                return True
+        except Exception as e:
+            print(f"[-] Startup folder registration error: {e}")
+
+        print("[-] Installation failed. Please run terminal with 'Run as Administrator'.")
+        return False
+
+    elif system == "Linux":
+        unit_content = f"""[Unit]
+Description=MiniSOC Endpoint EDR Agent
+After=network.target
+
+[Service]
+Type=simple
+ExecStart={py_exe} {script_path} {server_url}
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+"""
+        service_path = "/etc/systemd/system/minisoc-agent.service"
+        try:
+            with open(service_path, "w") as f:
+                f.write(unit_content)
+            subprocess.run(["systemctl", "daemon-reload"], check=True)
+            subprocess.run(["systemctl", "enable", "--now", "minisoc-agent"], check=True)
+            print(f"[+] Successfully created and enabled systemd service: {service_path}")
+            print("[+] Agent is now running persistently across all system reboots.")
+            return True
+        except PermissionError:
+            print("[-] Permission denied. Please run with sudo: sudo python3 endpoint_agent.py --install")
+            return False
+        except Exception as e:
+            print(f"[-] Systemd installation failed: {e}")
+            return False
+
+    print(f"[-] OS {system} service auto-installation not supported.")
+    return False
+
+def uninstall_service():
+    system = platform.system()
+    print("[*] Uninstalling MiniSOC Endpoint Agent service...")
+    removed = False
+
+    if system == "Windows":
+        task_name = "MiniSOC_Endpoint_Agent"
+        subprocess.run(["schtasks", "/End", "/TN", task_name], capture_output=True)
+        res = subprocess.run(["schtasks", "/Delete", "/TN", task_name, "/F"], capture_output=True)
+        if res.returncode == 0:
+            print(f"[+] Removed Task Scheduler task '{task_name}'.")
+            removed = True
+
+        startup_dir = os.path.join(os.environ.get('APPDATA', ''), 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup')
+        vbs_path = os.path.join(startup_dir, "minisoc_agent.vbs")
+        if os.path.exists(vbs_path):
+            try:
+                os.remove(vbs_path)
+                print(f"[+] Removed Startup runner '{vbs_path}'.")
+                removed = True
+            except Exception as e:
+                print(f"[-] Could not remove {vbs_path}: {e}")
+
+        # Terminate running pythonw agent process
+        subprocess.run(["taskkill", "/F", "/IM", "pythonw.exe"], capture_output=True)
+        if removed:
+            print("[+] MiniSOC Agent uninstalled successfully.")
+            return True
+        else:
+            print("[-] No installed MiniSOC background service found.")
+            return False
+
+    elif system == "Linux":
+        service_path = "/etc/systemd/system/minisoc-agent.service"
+        try:
+            subprocess.run(["systemctl", "disable", "--now", "minisoc-agent"], capture_output=True)
+            if os.path.exists(service_path):
+                os.remove(service_path)
+            subprocess.run(["systemctl", "daemon-reload"], capture_output=True)
+            print("[+] MiniSOC systemd service removed.")
+            return True
+        except Exception as e:
+            print(f"[-] Uninstall failed: {e}")
+            return False
+    return False
+
 if __name__ == "__main__":
-    target = sys.argv[1] if len(sys.argv) > 1 else DEFAULT_SERVER
-    run_agent(target)
+    args = sys.argv[1:]
+    if "--install" in args:
+        target = DEFAULT_SERVER
+        for a in args:
+            if a != "--install" and not a.startswith("--"):
+                target = a
+                break
+        install_service(target)
+    elif "--uninstall" in args:
+        uninstall_service()
+    elif "--status" in args:
+        if platform.system() == "Windows":
+            subprocess.run(["schtasks", "/Query", "/TN", "MiniSOC_Endpoint_Agent", "/FO", "LIST", "/V"])
+        else:
+            subprocess.run(["systemctl", "status", "minisoc-agent"])
+    else:
+        target = args[0] if len(args) > 0 and not args[0].startswith("--") else DEFAULT_SERVER
+        run_agent(target)
