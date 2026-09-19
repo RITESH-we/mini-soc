@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Incidents{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h5 class="mb-0">Incident Tracker</h5>
+  <a href="/incidents/new" class="btn btn-sm btn-primary">+ New Incident</a>
+</div>
+<div class="card">
+  <div class="card-body p-0">
+    <table class="table table-sm mb-0">
+      <thead><tr>
+        <th>ID</th><th>Title</th><th>Severity</th><th>Status</th><th>Analyst</th><th>Created</th><th>Actions</th>
+      </tr></thead>
+      <tbody>
+      {% for i in incidents %}
+      <tr>
+        <td class="text-muted">#{{ i.id }}</td>
+        <td>{{ i.title }}</td>
+        <td><span class="badge badge-{{ i.severity }}">{{ i.severity }}</span></td>
+        <td>
+          <span class="badge {% if i.status=='OPEN' %}bg-danger{% elif i.status=='INVESTIGATING' %}bg-warning text-dark{% else %}bg-success{% endif %}">
+            {{ i.status }}
+          </span>
+        </td>
+        <td>{{ i.analyst }}</td>
+        <td class="text-muted small">{{ i.created_at[:16] if i.created_at else '-' }}</td>
+        <td>
+          <a href="/incidents/{{ i.id }}/report" class="btn btn-sm btn-outline-info me-1" target="_blank">📄 PDF Report</a>
+          {% if i.status != 'CLOSED' %}
+          <form method="POST" action="/incidents/{{ i.id }}/close" style="display:inline">
+            <button class="btn btn-sm btn-outline-success">Close</button>
+          </form>
+          {% else %}
+          <span class="text-muted small">Closed</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="7" class="text-center text-muted py-4">No incidents yet. Create one from the Alerts page or click "+ New Incident".</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

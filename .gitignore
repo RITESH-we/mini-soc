@@ -1,0 +1,26 @@
+﻿# Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Virtual environment
+venv/
+
+# Database
+*.db
+
+# Config (contains API keys - NEVER commit this)
+config.yaml
+
+# Logs
+*.log
+PSLogs/
+
+# VS Code
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+*.metadata.json
+reports_generated/

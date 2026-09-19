@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MiniSOC — {% block title %}Dashboard{% endblock %}</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body { background: #0d1117; color: #c9d1d9; }
+    .navbar { background: #161b22 !important; border-bottom: 1px solid #30363d; }
+    .navbar-brand { color: #58a6ff !important; font-weight: 700; letter-spacing: 1px; }
+    .nav-link { color: #8b949e !important; }
+    .nav-link:hover, .nav-link.active { color: #58a6ff !important; }
+    .card { background: #161b22; border: 1px solid #30363d; }
+    .card-header { background: #21262d; border-bottom: 1px solid #30363d; }
+    .table { color: #c9d1d9; }
+    .table th { color: #8b949e; border-color: #30363d; }
+    .table td { border-color: #21262d; }
+    .table tbody tr:hover { background: #21262d; }
+    .badge-CRITICAL { background: #da3633; }
+    .badge-HIGH     { background: #d29922; color: #000; }
+    .badge-MEDIUM   { background: #388bfd; }
+    .badge-LOW      { background: #3fb950; color: #000; }
+    .stat-card { border-left: 4px solid #58a6ff; }
+    .stat-card.critical { border-left-color: #da3633; }
+    .stat-card.warning  { border-left-color: #d29922; }
+    .stat-card.success  { border-left-color: #3fb950; }
+    .btn-enrich { font-size: 0.75rem; padding: 2px 8px; }
+  </style>
+</head>
+<body>
+<nav class="navbar navbar-expand-lg mb-4">
+  <div class="container-fluid">
+    <a class="navbar-brand" href="/">&#9632; MiniSOC</a>
+    <div class="navbar-nav ms-auto">
+      <a class="nav-link {% if request.endpoint=='index' %}active{% endif %}" href="/">Dashboard</a>
+      <a class="nav-link {% if request.endpoint=='alerts' %}active{% endif %}" href="/alerts">Alerts</a>
+      <a class="nav-link {% if request.endpoint=='incidents' %}active{% endif %}" href="/incidents">Incidents</a>
+    </div>
+  </div>
+</nav>
+<div class="container-fluid px-4">
+  {% block content %}{% endblock %}
+</div>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

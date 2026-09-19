@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}Alerts{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h5 class="mb-0">Alert Feed</h5>
+  <div>
+    {% for sev in ['ALL','CRITICAL','HIGH','MEDIUM','LOW'] %}
+    <a href="/alerts?severity={{ sev }}"
+       class="btn btn-sm me-1 {% if severity==sev %}btn-primary{% else %}btn-outline-secondary{% endif %}">
+      {{ sev }}
+    </a>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-body p-0">
+    <table class="table table-sm mb-0">
+      <thead><tr>
+        <th>ID</th><th>Time</th><th>Severity</th><th>Rule</th>
+        <th>MITRE Technique</th><th>User</th><th>IP</th>
+        <th>VT Score</th><th>Abuse%</th><th>Status</th><th>Actions</th>
+      </tr></thead>
+      <tbody>
+      {% for a in alerts %}
+      <tr id="row-{{ a.id }}">
+        <td class="text-muted">#{{ a.id }}</td>
+        <td class="text-muted small">{{ a.timestamp[:19] }}</td>
+        <td><span class="badge badge-{{ a.severity }}">{{ a.severity }}</span></td>
+        <td>{{ a.rule_name }}</td>
+        <td class="text-muted small">{{ a.mitre_technique }}</td>
+        <td>{{ a.src_user or '-' }}</td>
+        <td>{{ a.src_ip or '-' }}</td>
+        <td id="vt-{{ a.id }}">{{ a.vt_score or '-' }}</td>
+        <td id="abuse-{{ a.id }}">{{ a.abuse_score if a.abuse_score is not none else '-' }}</td>
+        <td>
+          <span class="badge {% if a.status=='OPEN' %}bg-danger{% elif a.status=='FP' %}bg-secondary{% else %}bg-success{% endif %}">
+            {{ a.status }}
+          </span>
+        </td>
+        <td>
+          {% if a.src_ip %}
+          <button class="btn btn-outline-info btn-enrich" onclick="enrich({{ a.id }})">Enrich</button>
+          {% endif %}
+          <button class="btn btn-outline-success btn-enrich" onclick="setStatus({{ a.id }},'CLOSED')">Close</button>
+          <button class="btn btn-outline-secondary btn-enrich" onclick="setStatus({{ a.id }},'FP')">FP</button>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="11" class="text-center text-muted py-4">No alerts. Run main.py to start monitoring.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function enrich(id){
+  fetch('/api/alert/'+id+'/enrich').then(r=>r.json()).then(d=>{
+    document.getElementById('vt-'+id).textContent    = d.vt_score||'-';
+    document.getElementById('abuse-'+id).textContent = d.abuse_score>=0?d.abuse_score+'%':'-';
+  });
+}
+function setStatus(id,status){
+  fetch('/api/alert/'+id+'/status',{method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({status:status})
+  }).then(()=>location.reload());
+}
+</script>
+{% endblock %}
