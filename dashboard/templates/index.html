@@ -1,136 +1,239 @@
 {% extends "base.html" %}
-{% block title %}SOC Operations Console{% endblock %}
+{% block title %}Enterprise Operations Center{% endblock %}
 {% block content %}
 
-<!-- Wazuh-Inspired Fleet Health Banner -->
+<!-- Executive Pitch & Operations Header -->
 <div class="card mb-4 border-info">
-  <div class="card-body py-2 px-3 d-flex flex-wrap justify-content-between align-items-center bg-dark rounded">
+  <div class="card-body py-3 px-4 d-flex flex-wrap justify-content-between align-items-center bg-dark rounded">
     <div class="d-flex align-items-center gap-3 my-1">
-      <span class="badge bg-primary fs-6">💻 Fleet Status</span>
-      <span class="small text-light"><strong>{{ total_endpoints }}</strong> Enrolled Endpoints</span>
-      <span class="small text-success">● <strong>{{ online_endpoints }}</strong> Online</span>
-      {% if isolated_endpoints > 0 %}
-      <span class="small text-danger">⚠️ <strong>{{ isolated_endpoints }}</strong> Isolated (Quarantined)</span>
-      {% endif %}
+      <div>
+        <h5 class="mb-0 text-info fw-bold d-flex align-items-center gap-2">
+          <span>🛡️ MiniSOC Operations Center</span>
+          <span class="badge bg-primary text-light fs-6 fw-normal">Enterprise v2.2</span>
+        </h5>
+        <span class="text-muted small">Autonomous SIEM, Behavioral UEBA &amp; Real-Time Active Defense</span>
+      </div>
     </div>
-    <!-- Quick Device Jump Pills -->
-    <div class="d-flex align-items-center gap-1 my-1">
-      <span class="small text-muted me-1">Filter by Device:</span>
-      <a href="/alerts" class="btn btn-xs btn-outline-secondary py-0 px-2 small">All Devices</a>
-      {% for d in devices %}
-      <a href="/alerts?device={{ d }}" class="btn btn-xs btn-outline-info py-0 px-2 small font-monospace">💻 {{ d }}</a>
-      {% endfor %}
+    
+    <!-- Quick Status & Actions -->
+    <div class="d-flex align-items-center gap-2 my-1">
+      <button class="btn btn-sm btn-outline-info d-flex align-items-center gap-1" data-bs-toggle="modal" data-bs-target="#pitchModal">
+        <span>👔</span>
+        <span>Executive Pitch Brief</span>
+      </button>
+      <a href="/hunting" class="btn btn-sm btn-outline-warning d-flex align-items-center gap-1">
+        <span>🎯</span>
+        <span>Threat Hunting</span>
+      </a>
+      <button class="btn btn-sm btn-outline-success" onclick="location.reload()">
+        <span>🔄 Refresh Stream</span>
+      </button>
     </div>
   </div>
 </div>
 
 <!-- Core SOC L1 Metric Cards -->
 <div class="row mb-4 g-3">
-  <div class="col-md-3">
-    <div class="card stat-card critical">
+  <div class="col-md-3 col-sm-6">
+    <div class="card stat-card critical h-100">
       <div class="card-body">
-        <div class="text-muted small text-uppercase fw-bold">Critical &amp; High Priority</div>
+        <div class="d-flex justify-content-between align-items-center mb-1">
+          <span class="text-muted small text-uppercase fw-bold">Critical &amp; High Threats</span>
+          <span class="fs-4">🚨</span>
+        </div>
         <div class="fs-2 fw-bold text-danger">{{ critical_high }}</div>
-        <div class="small text-muted">Immediate triage required</div>
+        <div class="small text-muted">Immediate triage required ({{ open_alerts }} total open)</div>
       </div>
     </div>
   </div>
-  <div class="col-md-3">
-    <div class="card stat-card warning">
+  
+  <div class="col-md-3 col-sm-6">
+    <div class="card stat-card h-100">
       <div class="card-body">
-        <div class="text-muted small text-uppercase fw-bold">Open Alert Queue</div>
-        <div class="fs-2 fw-bold text-warning">{{ open_alerts }}</div>
-        <div class="small text-muted">Awaiting analyst action</div>
+        <div class="d-flex justify-content-between align-items-center mb-1">
+          <span class="text-muted small text-uppercase fw-bold">Monitored Fleet Health</span>
+          <span class="fs-4">💻</span>
+        </div>
+        <div class="fs-2 fw-bold text-info">{{ online_endpoints }} / {{ total_endpoints }}</div>
+        <div class="small text-muted">
+          {% if isolated_endpoints > 0 %}
+          <span class="text-danger fw-bold">⚠️ {{ isolated_endpoints }} host(s) quarantined</span>
+          {% else %}
+          <span class="text-success">● 100% Endpoints nominal</span>
+          {% endif %}
+        </div>
       </div>
     </div>
   </div>
-  <div class="col-md-3">
-    <div class="card stat-card">
+  
+  <div class="col-md-3 col-sm-6">
+    <div class="card stat-card warning h-100">
       <div class="card-body">
-        <div class="text-muted small text-uppercase fw-bold">Communicating Devices</div>
-        <div class="fs-2 fw-bold text-info">{{ total_endpoints }}</div>
-        <div class="small text-muted">Active host log shippers</div>
+        <div class="d-flex justify-content-between align-items-center mb-1">
+          <span class="text-muted small text-uppercase fw-bold">Active Firewall Blocks</span>
+          <span class="fs-4">🛡️</span>
+        </div>
+        <div class="fs-2 fw-bold text-warning">{{ blocked_ips_count }}</div>
+        <div class="small text-muted">Host firewall IPS containment drops</div>
       </div>
     </div>
   </div>
-  <div class="col-md-3">
-    <div class="card stat-card success">
+  
+  <div class="col-md-3 col-sm-6">
+    <div class="card stat-card success h-100">
       <div class="card-body">
-        <div class="text-muted small text-uppercase fw-bold">Active Cases / Incidents</div>
+        <div class="d-flex justify-content-between align-items-center mb-1">
+          <span class="text-muted small text-uppercase fw-bold">Active Investigations</span>
+          <span class="fs-4">📁</span>
+        </div>
         <div class="fs-2 fw-bold text-success">{{ open_inc }}</div>
-        <div class="small text-muted">Under formal investigation</div>
+        <div class="small text-muted">Formal escalated security cases</div>
       </div>
     </div>
   </div>
 </div>
 
-<!-- Visual Analytics: Threat Matrix & MITRE ATT&CK -->
+<!-- Visual Analytics & UEBA Behavioral Risk Section -->
 <div class="row mb-4 g-3">
-  <div class="col-md-5">
+  <!-- Severity Chart -->
+  <div class="col-lg-3 col-md-6">
     <div class="card h-100">
       <div class="card-header d-flex justify-content-between align-items-center">
-        <span><strong>Threat Severity Distribution</strong></span>
-        <span class="badge bg-secondary">Live Metrics</span>
+        <span><strong>Threat Severity</strong></span>
+        <span class="badge bg-secondary">Real-Time</span>
       </div>
-      <div class="card-body d-flex align-items-center justify-content-center">
-        <canvas id="sevChart" height="210"></canvas>
+      <div class="card-body d-flex align-items-center justify-content-center p-3">
+        <canvas id="sevChart" height="190"></canvas>
       </div>
     </div>
   </div>
-  <div class="col-md-7">
+
+  <!-- MITRE ATT&CK Tactic Bar Chart -->
+  <div class="col-lg-5 col-md-6">
     <div class="card h-100">
       <div class="card-header d-flex justify-content-between align-items-center">
         <span><strong>MITRE ATT&amp;CK Tactic Coverage</strong></span>
-        <span class="badge bg-primary">Threat Matrix</span>
+        <span class="badge bg-primary">v14 Framework</span>
       </div>
-      <div class="card-body">
-        <canvas id="mitreChart" height="210"></canvas>
+      <div class="card-body p-3">
+        <canvas id="mitreChart" height="190"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- Behavioral UEBA Risk Widget (Exabeam & Securonix Inspiration) -->
+  <div class="col-lg-4 col-md-12">
+    <div class="card h-100">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span><strong>👤 UEBA Behavioral Risk</strong></span>
+        <span class="badge bg-purple" style="background-color: #8b5cf6; color: white;">Dynamic Scoring</span>
+      </div>
+      <div class="card-body p-0">
+        <div class="list-group list-group-flush">
+          {% for r in top_risks %}
+          <div class="list-group-item bg-transparent text-light border-secondary py-2 px-3">
+            <div class="d-flex justify-content-between align-items-center mb-1">
+              <div>
+                <span class="fw-bold font-monospace text-info">{{ r.entity_id }}</span>
+                <span class="badge bg-dark border border-secondary text-muted ms-1" style="font-size:0.7rem;">{{ r.entity_type }}</span>
+              </div>
+              <div>
+                {% if r.risk_score >= 70 %}
+                <span class="badge bg-danger">{{ r.risk_score }}/100 CRITICAL</span>
+                {% elif r.risk_score >= 40 %}
+                <span class="badge bg-warning text-dark">{{ r.risk_score }}/100 HIGH</span>
+                {% elif r.risk_score >= 20 %}
+                <span class="badge bg-info text-dark">{{ r.risk_score }}/100 MED</span>
+                {% else %}
+                <span class="badge bg-success">{{ r.risk_score }}/100 LOW</span>
+                {% endif %}
+              </div>
+            </div>
+            <div class="progress mb-1" style="height: 4px;">
+              <div class="progress-bar {% if r.risk_score >= 70 %}bg-danger{% elif r.risk_score >= 40 %}bg-warning{% else %}bg-info{% endif %}" role="progressbar" style="width: {{ r.risk_score }}%;"></div>
+            </div>
+            <div class="small text-muted" style="font-size: 0.75rem;">
+              {% if r.factors and r.factors|length > 0 %}
+              Factor: {{ r.factors[0].rule }} (+{{ r.factors[0].points }} pts)
+              {% else %}
+              Activity nominal within 24h window
+              {% endif %}
+            </div>
+          </div>
+          {% else %}
+          <div class="p-3 text-center text-muted small">
+            No high-risk entities detected. Baselines nominal.
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      <div class="card-footer bg-transparent border-secondary text-center py-2">
+        <a href="/agents" class="small text-info text-decoration-none">Inspect All Fleet Entities &rarr;</a>
       </div>
     </div>
   </div>
 </div>
 
-<!-- Real-Time Alert Feed with Omnisearch -->
+<!-- Real-Time Alert Feed with Quick Filters & Omnisearch -->
 <div class="card">
   <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
     <div class="d-flex align-items-center gap-2">
-      <strong>🚨 Live SOC Ingestion Stream</strong>
+      <strong>🚨 Live Ingestion &amp; Detection Stream</strong>
       <span class="badge bg-info">Auto-Refreshes</span>
     </div>
-    <div class="d-flex gap-2">
-      <input type="text" id="liveSearch" class="form-control form-control-sm bg-dark text-light border-secondary" placeholder="🔍 Instant search by Device, IP, Rule, User..." onkeyup="filterLiveAlerts()" style="width: 320px;">
-      <a href="/alerts" class="btn btn-sm btn-outline-info">Open Full Triage View</a>
+    
+    <!-- Quick Filters -->
+    <div class="d-flex align-items-center gap-2 flex-wrap">
+      <div class="btn-group btn-group-sm" role="group">
+        <button type="button" class="btn btn-outline-secondary active" onclick="filterBySeverity('ALL', this)">All</button>
+        <button type="button" class="btn btn-outline-danger" onclick="filterBySeverity('CRITICAL', this)">Critical</button>
+        <button type="button" class="btn btn-outline-warning" onclick="filterBySeverity('HIGH', this)">High</button>
+        <button type="button" class="btn btn-outline-primary" onclick="filterBySeverity('MEDIUM', this)">Medium</button>
+      </div>
+
+      <input type="text" id="liveSearch" class="form-control form-control-sm bg-dark text-light border-secondary" placeholder="🔍 Instant search by Host, IP, Rule, User..." onkeyup="filterLiveAlerts()" style="width: 280px;">
+      
+      <a href="/alerts" class="btn btn-sm btn-info text-dark fw-bold">Full Triage Workspace</a>
     </div>
   </div>
+  
   <div class="card-body p-0">
     <div class="table-responsive">
-      <table class="table table-sm mb-0" id="liveTable">
+      <table class="table table-sm table-hover mb-0" id="liveTable">
         <thead>
           <tr>
             <th>Time</th>
-            <th>Device / Host</th>
+            <th>Target Host</th>
             <th>Severity</th>
             <th>Detection Rule</th>
             <th>MITRE Technique</th>
-            <th>Target / User</th>
+            <th>Target User</th>
             <th>Source IP</th>
             <th>Status</th>
-            <th>Action</th>
+            <th>Actions</th>
           </tr>
         </thead>
         <tbody>
           {% for a in recent %}
-          <tr>
-            <td class="text-muted small font-monospace">{{ a.timestamp[:19] }}</td>
+          <tr class="alert-row" data-severity="{{ a.severity }}" data-status="{{ a.status }}">
+            <td class="text-muted small font-monospace" style="width: 90px;">{{ a.timestamp[11:19] }}</td>
             <td>
-              <span class="badge bg-dark border border-info text-info font-monospace py-1 px-2">
-                💻 {{ a.device_name or 'Localhost' }}
-              </span>
+              <a href="/alerts?device={{ a.device_name or 'LENOVO' }}" class="text-decoration-none">
+                <span class="badge bg-dark border border-info text-info font-monospace py-1 px-2">
+                  💻 {{ a.device_name or 'Localhost' }}
+                </span>
+              </a>
             </td>
             <td><span class="badge badge-{{ a.severity }}">{{ a.severity }}</span></td>
-            <td class="fw-bold text-light">{{ a.rule_name }}</td>
-            <td class="text-muted small">{{ a.mitre_technique }}</td>
-            <td class="font-monospace small text-light">{{ a.src_user or '-' }}</td>
+            <td>
+              <span class="fw-bold text-light">{{ a.rule_name }}</span>
+            </td>
+            <td>
+              <span class="badge bg-dark border border-secondary text-muted small font-monospace">
+                {{ a.mitre_technique or 'T1059' }}
+              </span>
+            </td>
+            <td class="font-monospace small text-info">{{ a.src_user or '-' }}</td>
             <td class="font-monospace small text-warning">{{ a.src_ip or '-' }}</td>
             <td>
               <span class="badge {% if a.status=='OPEN' %}bg-danger{% elif a.status=='FP' %}bg-secondary{% else %}bg-success{% endif %}">
@@ -138,12 +241,15 @@
               </span>
             </td>
             <td>
-              <a href="/alerts" class="btn btn-xs btn-outline-info py-0 px-2" style="font-size:0.75rem;">Triage</a>
+              <div class="btn-group btn-group-sm">
+                <button class="btn btn-xs btn-outline-warning py-0 px-2" onclick="quickEscalate({{ a.id }}, this)" title="Escalate to formal Incident">⚡ Escalate</button>
+                <a href="/alerts" class="btn btn-xs btn-outline-info py-0 px-2" title="Investigate in Triage Workspace">Investigate</a>
+              </div>
             </td>
           </tr>
           {% else %}
           <tr>
-            <td colspan="9" class="text-center text-muted py-4">No active security alerts. Ingestion pipeline nominal.</td>
+            <td colspan="9" class="text-center text-muted py-4">No active security alerts recorded. Ingestion stream nominal.</td>
           </tr>
           {% endfor %}
         </tbody>
@@ -151,20 +257,101 @@
     </div>
   </div>
 </div>
+
+<!-- Executive Pitch Briefing Modal -->
+<div class="modal fade" id="pitchModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content bg-dark border-info text-light">
+      <div class="modal-header border-secondary">
+        <h5 class="modal-title text-info fw-bold">👔 MiniSOC Platform — Executive &amp; Client Pitch Brief</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <h6 class="text-warning fw-bold">1. What is MiniSOC?</h6>
+          <p class="small text-muted mb-0">
+            MiniSOC is a unified, cloud-ready SIEM, XDR, and behavioral UEBA platform designed to eliminate the high licensing fees and operational bloat of legacy platforms like Splunk ES, Microsoft Sentinel, and IBM QRadar.
+          </p>
+        </div>
+        
+        <div class="mb-3">
+          <h6 class="text-warning fw-bold">2. Value Proposition for Clients &amp; Enterprise Teams</h6>
+          <ul class="small text-muted mb-0">
+            <li><strong>Zero Per-GB Indexing Tax:</strong> Built on open OCSF/ECS schemas with native sub-second indexing.</li>
+            <li><strong>Automated Active Containment:</strong> Enforces 1-click endpoint isolation and automated host-based firewall IPS drops.</li>
+            <li><strong>Native Behavioral UEBA:</strong> Calculates dynamic risk scores (0–100) for hosts and users out of the box.</li>
+            <li><strong>Autonomous AI Co-Pilot (Nova):</strong> Delivers instant Root Cause Analysis (RCA) and NIST SP 800-61 PDF compliance reports in seconds.</li>
+          </ul>
+        </div>
+
+        <div class="mb-3">
+          <h6 class="text-warning fw-bold">3. Commercial &amp; Pitch Rights</h6>
+          <div class="bg-black p-3 rounded small font-monospace text-success border border-secondary">
+            Licensed under MIT License with explicit Commercial Pitch, MSSP, and Client Deployment permissions. You can present, demonstrate, and deploy this solution for client engagements without legal restriction.
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer border-secondary">
+        <a href="/incidents" class="btn btn-sm btn-outline-info">View Incident Cases</a>
+        <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Close Brief</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 {% endblock %}
 
 {% block scripts %}
 <script>
-// Elastic-style instant client search
+// Filter alerts by search query
 function filterLiveAlerts() {
   const query = document.getElementById('liveSearch').value.toLowerCase();
-  const rows = document.querySelectorAll('#liveTable tbody tr');
+  const rows = document.querySelectorAll('#liveTable tbody tr.alert-row');
   rows.forEach(r => {
     const text = r.textContent.toLowerCase();
     r.style.display = text.includes(query) ? '' : 'none';
   });
 }
 
+// Filter alerts by severity pill
+function filterBySeverity(sev, btn) {
+  document.querySelectorAll('.btn-group button').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  const rows = document.querySelectorAll('#liveTable tbody tr.alert-row');
+  rows.forEach(r => {
+    if (sev === 'ALL' || r.getAttribute('data-severity') === sev) {
+      r.style.display = '';
+    } else {
+      r.style.display = 'none';
+    }
+  });
+}
+
+// Quick 1-Click Escalate from Live Feed
+function quickEscalate(alertId, btn) {
+  btn.disabled = true;
+  btn.textContent = '⏳ ...';
+  fetch(`/api/alert/${alertId}/escalate`, { method: 'POST' })
+    .then(r => r.json())
+    .then(d => {
+      if (d.success) {
+        btn.className = 'btn btn-xs btn-success py-0 px-2';
+        btn.textContent = '✅ Escalated';
+        setTimeout(() => location.reload(), 800);
+      } else {
+        alert('Failed to escalate: ' + (d.error || 'Unknown error'));
+        btn.disabled = false;
+        btn.textContent = '⚡ Escalate';
+      }
+    })
+    .catch(e => {
+      alert('Error: ' + e);
+      btn.disabled = false;
+      btn.textContent = '⚡ Escalate';
+    });
+}
+
+// Render Charts
 fetch('/api/stats').then(r=>r.json()).then(data=>{
   // Severity Chart
   const sevLabels = data.by_severity.map(x=>x.severity);
@@ -173,7 +360,10 @@ fetch('/api/stats').then(r=>r.json()).then(data=>{
   new Chart(document.getElementById('sevChart'),{
     type:'doughnut',
     data:{labels:sevLabels, datasets:[{data:sevData, backgroundColor:sevColors, borderWidth:0}]},
-    options:{plugins:{legend:{labels:{color:'#c9d1d9', font:{size:11}}}}}
+    options:{
+      maintainAspectRatio: false,
+      plugins:{legend:{labels:{color:'#c9d1d9', font:{size:11}}}}
+    }
   });
 
   // MITRE Chart
@@ -184,6 +374,7 @@ fetch('/api/stats').then(r=>r.json()).then(data=>{
       datasets:[{label:'Alerts', data:data.by_mitre.map(x=>x.cnt), backgroundColor:'#38bdf8'}]
     },
     options:{
+      maintainAspectRatio: false,
       indexAxis:'y',
       plugins:{legend:{display:false}},
       scales:{

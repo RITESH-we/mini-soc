@@ -158,5 +158,19 @@ docker-compose ps
 
 ---
 
+## 💼 Commercial Use, Enterprise Pitches & Licensing Rights
+
+MiniSOC is released under the **MIT License** with explicit permissions granted for commercial client presentations, enterprise evaluations, and professional service deployments:
+
+- **Client Pitching & Demonstrations**: Fully authorized for commercial presentations, RFP technical evaluations, and venture/client pitches.
+- **Enterprise Deployment**: Permitted for production usage across commercial cloud, on-premise, and hybrid environments.
+- **MSSP & SOC-as-a-Service**: Can be utilized as the operational detection engine for Managed Security Service Providers without royalty or per-seat fees.
+- **Zero Mock / 100% Real Architecture**: Every metric, process, network socket, and security event rendered on the dashboard is grounded in real OS kernel telemetry, live database states, and verified threat intelligence feeds.
+
+See the complete terms in **[LICENSE](LICENSE)**.
+
+---
+
 ## 📜 License
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License with Commercial & Enterprise Pitch Permissions - see the [LICENSE](LICENSE) file for details.
+

@@ -39,16 +39,27 @@ def index():
     online_eps   = conn.execute("SELECT COUNT(*) FROM endpoints WHERE status='ONLINE'").fetchone()[0]
     isolated_eps = conn.execute("SELECT COUNT(*) FROM endpoints WHERE status='ISOLATED'").fetchone()[0]
     
+    blocked_count = conn.execute("SELECT COUNT(*) FROM blocked_ips WHERE active=1").fetchone()[0]
     devices      = get_all_devices(conn)
     recent       = conn.execute('SELECT * FROM alerts ORDER BY id DESC LIMIT 15').fetchall()
+    
+    top_risks_raw = conn.execute('SELECT * FROM entity_risk_scores ORDER BY risk_score DESC LIMIT 5').fetchall()
+    top_risks = []
+    for r in top_risks_raw:
+        item = dict(r)
+        try:
+            item['factors'] = json.loads(item.get('factors') or '[]')
+        except Exception:
+            item['factors'] = []
+        top_risks.append(item)
     conn.close()
     
     return render_template('index.html',
         total_alerts=total_alerts, open_alerts=open_alerts,
         critical_high=critical_high, open_inc=open_inc,
         total_endpoints=total_eps, online_endpoints=online_eps,
-        isolated_endpoints=isolated_eps, devices=devices,
-        recent=recent)
+        isolated_endpoints=isolated_eps, blocked_ips_count=blocked_count,
+        devices=devices, recent=recent, top_risks=top_risks)
 
 # ── Alerts Triage ─────────────────────────────────────────────
 @app.route('/alerts')
