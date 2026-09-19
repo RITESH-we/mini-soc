@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}Endpoint Agent Fleet{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h4 class="mb-0 text-info">Distributed Endpoint Agent Fleet</h4>
+    <span class="text-muted small">Real-time status of cross-platform monitoring agents streaming telemetry to MiniSOC</span>
+  </div>
+  <div>
+    <span class="badge bg-success">{{ endpoints|length }} Active Agent(s)</span>
+  </div>
+</div>
+
+<div class="card mb-4">
+  <div class="card-header bg-dark text-light border-secondary">
+    <strong>📋 Enrolled Host Endpoints</strong>
+  </div>
+  <div class="card-body p-0">
+    <table class="table table-sm mb-0">
+      <thead>
+        <tr>
+          <th>Hostname</th>
+          <th>IP Address</th>
+          <th>Operating System</th>
+          <th>Architecture</th>
+          <th>Agent Version</th>
+          <th>Last Heartbeat</th>
+          <th>Status</th>
+          <th>Host Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for ep in endpoints %}
+        <tr>
+          <td class="fw-bold text-light">{{ ep.hostname }}</td>
+          <td class="font-monospace text-warning">{{ ep.ip_address }}</td>
+          <td>{{ ep.os }}</td>
+          <td class="text-muted small">{{ ep.architecture }}</td>
+          <td><span class="badge bg-info">v{{ ep.agent_version }}</span></td>
+          <td class="text-muted small">{{ ep.last_heartbeat[:19] }}</td>
+          <td>
+            <span class="badge bg-success">{{ ep.status }}</span>
+          </td>
+          <td>
+            <button class="btn btn-outline-danger btn-enrich" onclick="alert('Host containment order queued for {{ ep.hostname }}.')">Isolate Host</button>
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="8" class="text-center text-muted py-4">
+            No remote agents enrolled yet.<br/>
+            <span class="small">Deploy an agent by executing: <code>python agent/endpoint_agent.py http://{{ server_ip }}:5000/api/v1/telemetry</code></span>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Deployment Runbook Snippet -->
+<div class="card">
+  <div class="card-header bg-dark text-light border-secondary">
+    <strong>🚀 Agent Deployment Quickstart</strong>
+  </div>
+  <div class="card-body">
+    <p class="small text-muted mb-2">To enroll a new workstation or server into your MiniSOC cluster, copy the standalone agent script to the target node and start the background telemetry daemon:</p>
+    <div class="bg-black p-3 rounded font-monospace small text-success">
+      # Run locally or on any remote Windows / Linux endpoint:<br/>
+      python agent/endpoint_agent.py http://127.0.0.1:5000/api/v1/telemetry
+    </div>
+  </div>
+</div>
+{% endblock %}

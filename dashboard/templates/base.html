@@ -3,47 +3,171 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>MiniSOC — {% block title %}Dashboard{% endblock %}</title>
+  <title>MiniSOC v2.0 — {% block title %}Dashboard{% endblock %}</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
-    body { background: #0d1117; color: #c9d1d9; }
-    .navbar { background: #161b22 !important; border-bottom: 1px solid #30363d; }
-    .navbar-brand { color: #58a6ff !important; font-weight: 700; letter-spacing: 1px; }
-    .nav-link { color: #8b949e !important; }
-    .nav-link:hover, .nav-link.active { color: #58a6ff !important; }
-    .card { background: #161b22; border: 1px solid #30363d; }
-    .card-header { background: #21262d; border-bottom: 1px solid #30363d; }
+    body { background: #0b0f17; color: #c9d1d9; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+    .navbar { background: #131b26 !important; border-bottom: 1px solid #253346; }
+    .navbar-brand { color: #38bdf8 !important; font-weight: 800; letter-spacing: 1px; }
+    .nav-link { color: #94a3b8 !important; font-weight: 500; }
+    .nav-link:hover, .nav-link.active { color: #38bdf8 !important; }
+    .card { background: #131b26; border: 1px solid #253346; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3); }
+    .card-header { background: #1a2433; border-bottom: 1px solid #253346; }
     .table { color: #c9d1d9; }
-    .table th { color: #8b949e; border-color: #30363d; }
-    .table td { border-color: #21262d; }
-    .table tbody tr:hover { background: #21262d; }
-    .badge-CRITICAL { background: #da3633; }
-    .badge-HIGH     { background: #d29922; color: #000; }
-    .badge-MEDIUM   { background: #388bfd; }
-    .badge-LOW      { background: #3fb950; color: #000; }
-    .stat-card { border-left: 4px solid #58a6ff; }
-    .stat-card.critical { border-left-color: #da3633; }
-    .stat-card.warning  { border-left-color: #d29922; }
-    .stat-card.success  { border-left-color: #3fb950; }
+    .table th { color: #94a3b8; border-color: #253346; font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.5px; }
+    .table td { border-color: #1a2433; }
+    .table tbody tr:hover { background: #1c2738; }
+    .badge-CRITICAL { background: #ef4444; }
+    .badge-HIGH     { background: #f59e0b; color: #000; }
+    .badge-MEDIUM   { background: #3b82f6; }
+    .badge-LOW      { background: #10b981; color: #000; }
+    .stat-card { border-left: 4px solid #38bdf8; }
+    .stat-card.critical { border-left-color: #ef4444; }
+    .stat-card.warning  { border-left-color: #f59e0b; }
+    .stat-card.success  { border-left-color: #10b981; }
     .btn-enrich { font-size: 0.75rem; padding: 2px 8px; }
+
+    /* Nova Floating AI Co-Pilot Widget */
+    #nova-toggle {
+      position: fixed;
+      bottom: 25px;
+      right: 25px;
+      z-index: 1050;
+      border-radius: 50px;
+      padding: 10px 20px;
+      box-shadow: 0 8px 24px rgba(56, 189, 248, 0.3);
+      font-weight: 600;
+    }
+    #nova-drawer {
+      position: fixed;
+      bottom: 85px;
+      right: 25px;
+      width: 380px;
+      height: 500px;
+      z-index: 1050;
+      background: #131b26;
+      border: 1px solid #38bdf8;
+      border-radius: 12px;
+      display: none;
+      flex-direction: column;
+      box-shadow: 0 12px 32px rgba(0,0,0,0.6);
+    }
+    #nova-messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 15px;
+      font-size: 0.88rem;
+    }
+    .chat-bubble-ai {
+      background: #1e293b;
+      border-left: 3px solid #38bdf8;
+      padding: 8px 12px;
+      border-radius: 6px;
+      margin-bottom: 10px;
+    }
+    .chat-bubble-user {
+      background: #0369a1;
+      color: white;
+      padding: 8px 12px;
+      border-radius: 6px;
+      margin-bottom: 10px;
+      text-align: right;
+    }
   </style>
 </head>
 <body>
 <nav class="navbar navbar-expand-lg mb-4">
-  <div class="container-fluid">
-    <a class="navbar-brand" href="/">&#9632; MiniSOC</a>
-    <div class="navbar-nav ms-auto">
-      <a class="nav-link {% if request.endpoint=='index' %}active{% endif %}" href="/">Dashboard</a>
-      <a class="nav-link {% if request.endpoint=='alerts' %}active{% endif %}" href="/alerts">Alerts</a>
-      <a class="nav-link {% if request.endpoint=='incidents' %}active{% endif %}" href="/incidents">Incidents</a>
+  <div class="container-fluid px-4">
+    <a class="navbar-brand" href="/">&#9632; MiniSOC <span class="badge bg-primary fs-6 fw-normal">v2.0 Enterprise</span></a>
+    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navContent">
+      <span class="navbar-toggler-icon"></span>
+    </button>
+    <div class="collapse navbar-collapse" id="navContent">
+      <div class="navbar-nav ms-auto">
+        <a class="nav-link {% if request.endpoint=='index' %}active{% endif %}" href="/">Dashboard</a>
+        <a class="nav-link {% if request.endpoint=='alerts' %}active{% endif %}" href="/alerts">Alerts</a>
+        <a class="nav-link {% if request.endpoint=='incidents' %}active{% endif %}" href="/incidents">Incidents</a>
+        <a class="nav-link {% if request.endpoint=='network_view' %}active{% endif %}" href="/network">Network (NSM/IPS)</a>
+        <a class="nav-link {% if request.endpoint=='agents_view' %}active{% endif %}" href="/agents">Endpoints</a>
+      </div>
     </div>
   </div>
 </nav>
+
 <div class="container-fluid px-4">
   {% block content %}{% endblock %}
 </div>
+
+<!-- Nova AI Floating Assistant -->
+<button id="nova-toggle" class="btn btn-primary d-flex align-items-center gap-2" onclick="toggleNova()">
+  <span>🤖</span>
+  <span>Nova AI Analyst</span>
+</button>
+
+<div id="nova-drawer">
+  <div class="p-3 border-bottom border-secondary d-flex justify-content-between align-items-center bg-dark rounded-top">
+    <div>
+      <strong class="text-info">🤖 Nova — AI SOC Co-Pilot</strong><br/>
+      <small class="text-muted" style="font-size:0.75rem;">Autonomous Tier 1/2 Reasoning Engine</small>
+    </div>
+    <button class="btn btn-sm btn-outline-secondary py-0 px-2 text-light" onclick="toggleNova()">&times;</button>
+  </div>
+  <div id="nova-messages">
+    <div class="chat-bubble-ai">
+      <strong>Nova:</strong> Hello Analyst! I am reviewing your event pipeline. Ask me about active alerts, MITRE techniques, or triage recommendations!
+    </div>
+  </div>
+  <div class="p-2 border-top border-secondary bg-dark rounded-bottom">
+    <div class="input-group input-group-sm">
+      <input type="text" id="nova-input" class="form-control bg-dark text-light border-secondary" placeholder="Ask Nova a question..." onkeydown="if(event.key==='Enter') sendNovaMsg()">
+      <button class="btn btn-info" onclick="sendNovaMsg()">Send</button>
+    </div>
+  </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+function toggleNova() {
+  const d = document.getElementById('nova-drawer');
+  d.style.display = (d.style.display === 'flex') ? 'none' : 'flex';
+}
+
+function sendNovaMsg() {
+  const inp = document.getElementById('nova-input');
+  const txt = inp.value.trim();
+  if(!txt) return;
+
+  const msgs = document.getElementById('nova-messages');
+  // Append user bubble
+  const userDiv = document.createElement('div');
+  userDiv.className = 'chat-bubble-user';
+  userDiv.textContent = txt;
+  msgs.appendChild(userDiv);
+  inp.value = '';
+
+  // Query Nova API
+  fetch('/api/ai/chat', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({message: txt})
+  })
+  .then(r => r.json())
+  .then(data => {
+    const aiDiv = document.createElement('div');
+    aiDiv.className = 'chat-bubble-ai';
+    aiDiv.innerHTML = '<strong>Nova:</strong> ' + data.response.replace(/\n/g, '<br/>');
+    msgs.appendChild(aiDiv);
+    msgs.scrollTop = msgs.scrollHeight;
+  })
+  .catch(err => {
+    const errDiv = document.createElement('div');
+    errDiv.className = 'chat-bubble-ai text-danger';
+    errDiv.textContent = 'Nova is currently analyzing high-volume logs. Please retry in a moment.';
+    msgs.appendChild(errDiv);
+  });
+}
+</script>
 {% block scripts %}{% endblock %}
 </body>
 </html>
