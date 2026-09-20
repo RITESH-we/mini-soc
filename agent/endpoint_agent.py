@@ -255,18 +255,79 @@ def _parse_xml_event(node) -> dict:
             mitre_tactic = "Initial Access"
             mitre_technique = "T1078 - Valid Accounts"
             details = f"Successful logon for user '{user}' from IP {src_ip}"
-        elif event_id == 4688:
-            rule_name = "Process Creation"
+        elif event_id == 4648:
+            rule_name = "Logon Attempt with Explicit Credentials (PtH)"
+            severity = "HIGH"
+            mitre_tactic = "Lateral Movement"
+            mitre_technique = "T1550.002 - Pass the Hash"
+            details = f"Explicit credential logon: user '{user}' connecting to target '{fields.get('TargetServerName', 'LOCAL')}'"
+        elif event_id == 4672:
+            rule_name = "Admin Token Assigned to New Logon"
             severity = "LOW"
-            mitre_tactic = "Execution"
-            mitre_technique = "T1059 - Command Execution"
-            details = f"Process spawned: {process} | CLI: {cmdline[:100]}"
+            mitre_tactic = "Privilege Escalation"
+            mitre_technique = "T1078.003 - Local Accounts"
+            details = f"Special administrative privileges assigned to logon session for '{user}'"
+        elif event_id == 4688:
+            # Deep CLI Inspection for Top 5 Attack Signatures
+            low_cmd = cmdline.lower()
+            if re.search(r"(vssadmin.*delete\s+shadows|wmic.*shadowcopy\s+delete|wbadmin.*delete\s+catalog|bcdedit.*recoveryenabled\s+no|bcdedit.*ignoreallfailures)", low_cmd):
+                rule_name = "Ransomware Recovery Inhibition (Shadow Copy Deletion)"
+                severity = "CRITICAL"
+                mitre_tactic = "Impact"
+                mitre_technique = "T1490 - Inhibit System Recovery"
+                details = f"RANSOMWARE ALERT: Shadow copy destruction command executed: {cmdline[:140]}"
+            elif re.search(r"(mimikatz|comsvcs\.dll.*minidump|vaultcmd|cmdkey\s+/list|whoami\s+/priv|findstr.*password)", low_cmd):
+                rule_name = "In-Memory Credential Dumping / Snooping"
+                severity = "HIGH"
+                mitre_tactic = "Credential Access"
+                mitre_technique = "T1003.001 - LSASS Memory"
+                details = f"Credential access / dumping command executed: {cmdline[:140]}"
+            elif re.search(r"(compress-archive|tar\s+-[a-z]*z|7z\s+a|rar\s+a)", low_cmd):
+                rule_name = "Data Staging for Exfiltration"
+                severity = "HIGH"
+                mitre_tactic = "Collection"
+                mitre_technique = "T1560 - Archive Collected Data"
+                details = f"Data staging archive command executed: {cmdline[:140]}"
+            elif re.search(r"(-enc\s+|-encodedcommand\s+|amsiutils|downloadstring|iex\s*\()", low_cmd):
+                rule_name = "Living-off-the-Land Obfuscated PowerShell"
+                severity = "HIGH"
+                mitre_tactic = "Execution"
+                mitre_technique = "T1059.001 - PowerShell"
+                details = f"Obfuscated PowerShell execution: {cmdline[:140]}"
+            else:
+                rule_name = "Process Creation"
+                severity = "LOW"
+                mitre_tactic = "Execution"
+                mitre_technique = "T1059 - Command Execution"
+                details = f"Process spawned: {process} | CLI: {cmdline[:100]}"
         elif event_id == 4104:
-            rule_name = "PowerShell Script Block"
-            severity = "MEDIUM"
-            mitre_tactic = "Execution"
-            mitre_technique = "T1059.001 - PowerShell"
-            details = f"PowerShell execution: {cmdline[:120]}"
+            low_cmd = cmdline.lower()
+            if re.search(r"(-enc\s+|-encodedcommand\s+|amsiutils|downloadstring|iex\s*\(|invoke-expression|bitstransfer|system\.net\.webclient)", low_cmd):
+                rule_name = "Suspicious PowerShell Script Block"
+                severity = "HIGH"
+                mitre_tactic = "Execution"
+                mitre_technique = "T1059.001 - PowerShell"
+                details = f"Living-off-the-Land script block detected: {cmdline[:140]}"
+            else:
+                rule_name = "PowerShell Script Block"
+                severity = "MEDIUM"
+                mitre_tactic = "Execution"
+                mitre_technique = "T1059.001 - PowerShell"
+                details = f"PowerShell execution: {cmdline[:120]}"
+        elif event_id == 4698:
+            task_name = fields.get("TaskName", "Unknown")
+            rule_name = "Scheduled Task Created"
+            severity = "HIGH"
+            mitre_tactic = "Persistence"
+            mitre_technique = "T1053.005 - Scheduled Task"
+            details = f"Rogue scheduled task created: '{task_name}' by '{user or fields.get('SubjectUserName', 'SYSTEM')}'"
+        elif event_id == 4697:
+            svc_name = fields.get("ServiceName", "Unknown")
+            rule_name = "System Service Installed"
+            severity = "HIGH"
+            mitre_tactic = "Persistence"
+            mitre_technique = "T1543.003 - Windows Service"
+            details = f"New system service installed: '{svc_name}' (Image: {fields.get('ServiceFileName', '')})"
         elif event_id == 4720:
             rule_name = "User Account Created"
             severity = "HIGH"
@@ -279,6 +340,12 @@ def _parse_xml_event(node) -> dict:
             mitre_tactic = "Privilege Escalation"
             mitre_technique = "T1078 - Valid Accounts"
             details = f"Member '{fields.get('MemberName', '')}' added to group '{user}'"
+        elif event_id == 1102:
+            rule_name = "Windows Audit Log Cleared"
+            severity = "CRITICAL"
+            mitre_tactic = "Defense Evasion"
+            mitre_technique = "T1070.001 - Clear Windows Event Logs"
+            details = f"Security audit log was wiped/cleared by user '{user or fields.get('SubjectUserName', 'UNKNOWN')}' (Anti-Forensics)"
         else:
             rule_name = f"Security Event {event_id}"
             severity = "LOW"
@@ -389,7 +456,7 @@ def get_security_audit_events():
 
     if system == "Windows":
         channels = [
-            ("Security", "*[System[(EventID=4624 or EventID=4625 or EventID=4688 or EventID=4720 or EventID=4732)]]"),
+            ("Security", "*[System[(EventID=4624 or EventID=4625 or EventID=4648 or EventID=4672 or EventID=4688 or EventID=4697 or EventID=4698 or EventID=4720 or EventID=4732 or EventID=1102)]]"),
             ("Microsoft-Windows-PowerShell/Operational", "*[System[(EventID=4104)]]")
         ]
         

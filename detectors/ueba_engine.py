@@ -2,16 +2,31 @@ import json
 from datetime import datetime, timedelta
 from database.models import get_conn
 
-# Risk point weighting matrix (inspired by Exabeam & Securonix)
+# Risk point weighting matrix (aligned with MITRE ATT&CK & UEBA benchmarks)
 RISK_RULES = {
+    # Top 5 Critical Attack Use Cases
+    "Ransomware Recovery Inhibition": {"points": 50, "category": "Impact / Ransomware"},
+    "Shadow Copy": {"points": 50, "category": "Impact / Ransomware"},
+    "In-Memory Credential Dumping": {"points": 45, "category": "Credential Access"},
+    "Credential Access": {"points": 40, "category": "Credential Access"},
+    "Pass the Hash": {"points": 45, "category": "Lateral Movement"},
+    "Explicit Credentials": {"points": 45, "category": "Lateral Movement"},
+    "Obfuscated PowerShell": {"points": 40, "category": "Living-off-the-Land"},
+    "Living-off-the-Land": {"points": 40, "category": "Living-off-the-Land"},
+    "Data Staging": {"points": 40, "category": "Collection / Exfiltration"},
+    "Malicious C2 Communication": {"points": 45, "category": "Command and Control"},
+    "Anomalous Outbound": {"points": 35, "category": "Command and Control"},
+    "Windows Audit Log Cleared": {"points": 50, "category": "Defense Tampering"},
+    "Scheduled Task Created": {"points": 35, "category": "Persistence"},
+    "System Service Installed": {"points": 40, "category": "Persistence"},
+    "Member Added to Security Group": {"points": 40, "category": "Privilege Escalation"},
+    "User Account Created": {"points": 30, "category": "Persistence"},
+    "Suspicious Tool on Remote Endpoint": {"points": 40, "category": "Execution Anomaly"},
+    # Baseline rules
     "Failed Logon": {"points": 15, "category": "Authentication Anomaly"},
     "Brute Force Attempt": {"points": 35, "category": "Credential Access"},
-    "Suspicious Process Creation": {"points": 40, "category": "Execution Anomaly"},
-    "PowerShell Encoded Command": {"points": 30, "category": "Defense Evasion"},
-    "User Account Created": {"points": 25, "category": "Persistence"},
-    "Member Added to Security Group": {"points": 35, "category": "Privilege Escalation"},
+    "Suspicious Process Creation": {"points": 35, "category": "Execution Anomaly"},
     "Port Scan Activity": {"points": 25, "category": "Discovery"},
-    "Malicious C2 Communication": {"points": 50, "category": "Command and Control"},
     "Host Isolated": {"points": 10, "category": "Containment Event"}
 }
 

@@ -114,17 +114,78 @@ It was engineered by identifying the foundational architectural bottlenecks, pro
 
 ---
 
+## 🛡️ Top 5 Most Critical Cyber Attack Use Cases & Advanced Threat Suite
+
+MiniSOC implements end-to-end telemetry harvesting, real-time correlation, UEBA behavioral risk scoring, and automated SOAR playbooks for the **Top 5 Most Critical Cyber Attack Vectors** encountered in modern enterprise environments:
+
+```
++---------------------------------------------------------------------------------------------------------+
+|                                    MINISOC TOP 5 ATTACK DEFENSE SUITE                                   |
++---------------------------------------------------------------------------------------------------------+
+| [1. RANSOMWARE]         VSS Shadow Copy Deletion (T1490)      ==> Host Isolation + Process Term (CRIT)  |
+| [2. CREDENTIAL THEFT]   LSASS Dumping & Pass-the-Hash (T1003) ==> Process Kill + Credential Revoke(HIGH)|
+| [3. LIVING-OFF-THE-LAND]Obfuscated PowerShell / Fileless(T1059)==> AMSI Detection + Script Kill (HIGH)  |
+| [4. C2 & EXFILTRATION]  Beaconing & Bulk Staging (T1071/T1560)==> EDR Local Firewall IP Drop (HIGH)     |
+| [5. ROGUE PERSISTENCE]  Scheduled Tasks & Anti-Forensics(T1053)==> Log Tamper Alert + Group Audit (CRIT)|
++---------------------------------------------------------------------------------------------------------+
+```
+
+### 1. Ransomware Recovery Inhibition & Shadow Copy Destruction (T1490 / T1486)
+- **The Threat**: Attackers (LockBit, BlackCat, Akira) systematically delete Volume Shadow Copies and disable system recovery mechanisms immediately before executing mass disk encryption.
+- **Signatures & Telemetry**: Event ID 4688 / process telemetry matching `vssadmin delete shadows`, `wmic shadowcopy delete`, `wbadmin delete catalog`, or `bcdedit /set {default} recoveryenabled no`.
+- **UEBA Impact**: **$+50$ pts (CRITICAL)**.
+- **SOAR Automated Response**: **1-Click Host Network Isolation** (enforcing local firewall quarantine) + immediate kill of the offending parent process.
+
+### 2. In-Memory Credential Dumping & Pass-the-Hash (T1003.001 / T1550.002)
+- **The Threat**: Attackers dump cached NTLM hashes from `lsass.exe` memory or replay stolen hashes across the subnet without knowing the user's cleartext password.
+- **Signatures & Telemetry**:
+  - Event ID 4648 (`Logon using explicit alternate credentials`) from non-domain controller endpoints.
+  - CLI executions of `comsvcs.dll, MiniDump`, `mimikatz.exe`, `vaultcmd`, or suspicious `whoami /priv` debugging queries.
+- **UEBA Impact**: **$+45$ pts (HIGH)**.
+- **SOAR Automated Response**: Autonomous process termination (`kill_process`) + alert escalation to SOC Tier 2 for Kerberos/NTLM credential reset.
+
+### 3. Living-off-the-Land (LotL) Obfuscated PowerShell & Fileless Execution (T1059.001 / T1027)
+- **The Threat**: Fileless intrusions evading signature-based antivirus by executing malicious payloads directly inside memory using native Windows binaries (`powershell.exe`, `wscript.exe`, `certutil.exe`).
+- **Signatures & Telemetry**:
+  - **Event ID 4104 (PowerShell Script Block Logging)** capturing de-obfuscated script blocks.
+  - Encoded parameters (`-enc`, `-encodedcommand`), execution policy bypasses (`-ep bypass`), AMSI tampering (`amsiutils`), or memory web cradles (`DownloadString`, `IEX`).
+- **UEBA Impact**: **$+40$ pts (HIGH)**.
+- **SOAR Automated Response**: Immediate PowerShell process termination + quarantine endpoint host.
+
+### 4. Malicious C2 Beaconing & Bulk Data Staging / Exfiltration (T1071.001 / T1560 / T1048)
+- **The Threat**: Compromised endpoints establish recurring command-and-control beacons and compress confidential company assets into encrypted archives prior to data exfiltration.
+- **Signatures & Telemetry**:
+  - Outbound TCP/UDP socket connections targeting known threat actor C2 ports (`:4444`, `:1337`, `:8888`, `:7070`, `:9001`, `:6667`, `:31337`).
+  - Mass command-line archiving utilities (`Compress-Archive`, `tar -czf`, `7z a`, `rar a`) targeting user profiles (`Documents`, `Desktop`, `.aws`, `.ssh`).
+- **UEBA Impact**: **$+40$ pts (HIGH)**.
+- **SOAR Automated Response**: **Endpoint Firewall IP Drop** (`netsh advfirewall` / `iptables` drop pushed directly to endpoint) + host isolation.
+
+### 5. Rogue Persistence via Scheduled Tasks / Services & Admin Privilege Escalation (T1053.005 / T1078.003 / T1070.001)
+- **The Threat**: Threat actors establish persistent access across host reboots by registering rogue scheduled tasks, creating hidden local administrator accounts, and clearing audit logs to cover their tracks.
+- **Signatures & Telemetry**:
+  - **Event ID 4698**: Scheduled task dynamically registered.
+  - **Event ID 4697**: New system service installed.
+  - **Event ID 4720 & 4732**: Local account created and added to the `Administrators` security group.
+  - **Event ID 1102**: The Windows Security audit log was cleared / wiped (Defense Tampering / Anti-Forensics).
+- **UEBA Impact**: **$+45$ to $+50$ pts (HIGH / CRITICAL)**.
+- **SOAR Automated Response**: High-priority alert notification + automated forensic case creation in SOC Incidents table.
+
+---
+
 ## 🎯 Detection Engineering & MITRE ATT&CK Matrix
 
-| Detection Rule | MITRE Tactic | Technique | Source | Description |
-|---|---|---|---|---|
-| **Brute Force Detection** | Credential Access | **T1110** | Security 4625 | $\ge 5$ logon failures within 60s window. |
-| **Pass-the-Hash / Explicit Creds** | Lateral Movement | **T1550.002** | Security 4648 | Logon attempts using explicit alternate credentials. |
-| **Port Sweep / Reconnaissance** | Discovery | **T1046** | NSM Engine | Rapid inbound scanning across multiple ports. |
-| **Suspicious Process Lineage** | Execution | **T1059** | Sysmon 1 / 4688 | Office binaries (`winword.exe`) spawning CLI shells. |
-| **PowerShell Obfuscation** | Execution | **T1059.001** | PowerShell 4104 | Base64 encoded commands, bypass flags, IEX downloads. |
-| **Persistence via Scheduled Task** | Persistence | **T1053.005** | Security 4698 | Dynamic registration of rogue scheduled tasks. |
-| **Privilege Escalation** | Privilege Escalation | **T1078.003** | Security 4732 | Account added to high-privilege Administrators group. |
+| Detection Rule | MITRE Tactic | Technique | Source | Threat Category | Severity |
+|---|---|---|---|---|---|
+| **Ransomware Shadow Copy Deletion** | Impact | **T1490** | Security 4688 / Sysmon | `RANSOMWARE` | `CRITICAL` |
+| **Pass-the-Hash / Explicit Creds** | Lateral Movement | **T1550.002** | Security 4648 | `CREDENTIAL_ACCESS` | `HIGH` |
+| **In-Memory LSASS Dumping** | Credential Access | **T1003.001** | Process / Sysmon 10 | `CREDENTIAL_ACCESS` | `HIGH` |
+| **Brute Force Detection** | Credential Access | **T1110** | Security 4625 | `CREDENTIAL_ACCESS` | `MEDIUM` |
+| **Obfuscated PowerShell / Fileless** | Execution | **T1059.001** | PowerShell 4104 / 4688 | `LIVING_OFF_THE_LAND` | `HIGH` |
+| **Data Staging for Exfiltration** | Collection | **T1560** | Security 4688 | `EXFILTRATION` | `HIGH` |
+| **Malicious Outbound C2 Beaconing** | Command & Control | **T1071.001** | NSM / Sockets | `EXFILTRATION` | `HIGH` |
+| **Rogue Scheduled Task Created** | Persistence | **T1053.005** | Security 4698 | `PERSISTENCE` | `HIGH` |
+| **Windows Audit Log Cleared** | Defense Evasion | **T1070.001** | Security 1102 | `PERSISTENCE` | `CRITICAL` |
+| **Privilege Escalation (Admin Added)**| Privilege Escalation | **T1078.003** | Security 4732 | `PERSISTENCE` | `HIGH` |
 
 ---
 

@@ -15,7 +15,8 @@ CREATE TABLE IF NOT EXISTS alerts (
     enriched         INTEGER DEFAULT 0,
     vt_score         TEXT,
     abuse_score      INTEGER,
-    status           TEXT DEFAULT 'OPEN'
+    status           TEXT DEFAULT 'OPEN',
+    threat_category  TEXT DEFAULT 'GENERAL'
 );
 
 CREATE TABLE IF NOT EXISTS incidents (
@@ -101,6 +102,7 @@ CREATE INDEX IF NOT EXISTS idx_alerts_device_ts ON alerts(device_name, timestamp
 CREATE INDEX IF NOT EXISTS idx_alerts_user_ts ON alerts(src_user, timestamp);
 CREATE INDEX IF NOT EXISTS idx_alerts_status ON alerts(status, timestamp);
 CREATE INDEX IF NOT EXISTS idx_alerts_severity ON alerts(severity);
+CREATE INDEX IF NOT EXISTS idx_alerts_category ON alerts(threat_category);
 CREATE INDEX IF NOT EXISTS idx_telemetry_host_ts ON telemetry_logs(hostname, timestamp);
 CREATE INDEX IF NOT EXISTS idx_telemetry_type ON telemetry_logs(log_type, timestamp);
 CREATE INDEX IF NOT EXISTS idx_network_alerts_ip ON network_alerts(src_ip, timestamp);

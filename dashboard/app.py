@@ -1,4 +1,4 @@
-import os, sys, yaml, io, csv, json
+import os, sys, yaml, io, csv, json, re
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
@@ -64,17 +64,22 @@ def index():
 # ── Alerts Triage ─────────────────────────────────────────────
 @app.route('/alerts')
 def alerts():
-    sev    = request.args.get('severity', 'ALL')
-    device = request.args.get('device', '')
-    conn   = get_conn()
-    devices = get_all_devices(conn)
+    sev      = request.args.get('severity', 'ALL')
+    cat      = request.args.get('category', 'ALL')
+    device   = request.args.get('device', '')
+    conn     = get_conn()
+    devices  = get_all_devices(conn)
 
-    query = 'SELECT * FROM alerts WHERE 1=1'
+    query  = 'SELECT * FROM alerts WHERE 1=1'
     params = []
 
     if sev != 'ALL':
         query += ' AND severity=?'
         params.append(sev)
+
+    if cat != 'ALL':
+        query += ' AND threat_category=?'
+        params.append(cat)
         
     if device:
         query += ' AND (device_name=? OR src_user=?)'
@@ -84,30 +89,34 @@ def alerts():
     rows = conn.execute(query, params).fetchall()
     conn.close()
 
-    return render_template('alerts.html', alerts=rows, severity=sev,
+    return render_template('alerts.html', alerts=rows, severity=sev, category=cat,
                            devices=devices, current_device=device)
 
 @app.route('/api/alerts/export')
 def export_alerts_csv():
     device = request.args.get('device', '')
+    cat    = request.args.get('category', 'ALL')
     conn   = get_conn()
     query  = 'SELECT * FROM alerts WHERE 1=1'
     params = []
     if device:
-        query += ' AND device_name=?'
-        params.append(device)
+        query += ' AND (device_name=? OR src_user=?)'
+        params.extend([device, device])
+    if cat != 'ALL':
+        query += ' AND threat_category=?'
+        params.append(cat)
     query += ' ORDER BY id DESC'
     rows = conn.execute(query, params).fetchall()
     conn.close()
 
     output = io.StringIO()
     writer = csv.writer(output)
-    writer.writerow(['ID', 'Timestamp', 'Device', 'Severity', 'Rule Name', 'MITRE Technique', 'Target User', 'Source IP', 'VT Score', 'Abuse Score', 'Status', 'Description'])
+    writer.writerow(['ID', 'Timestamp', 'Device', 'Severity', 'Category', 'Rule Name', 'MITRE Technique', 'Target User', 'Source IP', 'VT Score', 'Abuse Score', 'Status', 'Description'])
     
     for r in rows:
         writer.writerow([
             r['id'], r['timestamp'], r['device_name'] or 'Localhost',
-            r['severity'], r['rule_name'], r['mitre_technique'] or 'N/A',
+            r['severity'], r.get('threat_category', 'GENERAL'), r['rule_name'], r['mitre_technique'] or 'N/A',
             r['src_user'] or '-', r['src_ip'] or '-', r['vt_score'] or '-',
             r['abuse_score'] if r['abuse_score'] is not None else '-',
             r['status'], r['description'] or ''
@@ -465,7 +474,6 @@ def receive_telemetry():
             """, (hostname, now_iso, c_desc, remote_ip))
 
         # 3. Process structured security audit events (OCSF/ECS compliant)
-        SUSPICIOUS_CLI = ['mimikatz', 'invoke-', 'downloadstring', '-enc ', 'bypass', 'iex ', 'net user', 'whoami /priv']
         user_seen = None
 
         for ev in data.get('events', []):
@@ -489,45 +497,137 @@ def receive_telemetry():
                 VALUES (?, ?, 'SECURITY_EVENT', ?, ?, ?, ?, ?, ?)
             """, (hostname, now_iso, details, eid, user, src_ip, proc, raw_json_str))
 
-            # Actionable security alerts triage
+            # Actionable security alerts correlation across Top 5 Attack Use Cases
             should_alert = False
             alert_reason = details
+            threat_cat = "GENERAL"
+            low_cmd = cmdline.lower()
 
-            if eid == 4625:
+            # Use Case 1: Ransomware Recovery Inhibition (T1490 / T1486)
+            if re.search(r"(vssadmin.*delete\s+shadows|wmic.*shadowcopy\s+delete|wbadmin.*delete\s+catalog|bcdedit.*recoveryenabled\s+no|bcdedit.*ignoreallfailures)", low_cmd) or "Shadow Copy" in rname or "Ransomware" in rname:
+                should_alert = True
+                rname = "Ransomware Recovery Inhibition (Shadow Copy Deletion)"
+                sev = "CRITICAL"
+                threat_cat = "RANSOMWARE"
+                tactic = "Impact"
+                technique = "T1490 - Inhibit System Recovery"
+                alert_reason = f"CRITICAL RANSOMWARE ALERT: Shadow copy destruction command executed on {hostname}: {cmdline[:140]}"
+
+            # Use Case 2: In-Memory Credential Dumping & Pass-the-Hash (T1003.001 / T1550.002)
+            elif eid == 4648 or re.search(r"(mimikatz|comsvcs\.dll.*minidump|vaultcmd|cmdkey\s+/list|whoami\s+/priv|findstr.*password)", low_cmd):
+                should_alert = True
+                if eid == 4648:
+                    rname = "Logon Attempt with Explicit Credentials (Pass-the-Hash)"
+                    tactic = "Lateral Movement"
+                    technique = "T1550.002 - Pass the Hash"
+                    alert_reason = f"Explicit alternate credential logon from user '{user}' to '{ev.get('raw_fields', {}).get('TargetServerName', 'LOCAL')}'"
+                else:
+                    rname = "In-Memory Credential Dumping / LSASS Snooping"
+                    tactic = "Credential Access"
+                    technique = "T1003.001 - LSASS Memory"
+                    alert_reason = f"Credential theft command executed on {hostname}: {cmdline[:140]}"
+                sev = "HIGH"
+                threat_cat = "CREDENTIAL_ACCESS"
+
+            # Use Case 3: Living-off-the-Land Obfuscated PowerShell & Fileless Execution (T1059.001 / T1027)
+            elif eid == 4104 and re.search(r"(-enc\s+|-encodedcommand\s+|amsiutils|downloadstring|iex\s*\(|invoke-expression|bitstransfer|system\.net\.webclient)", low_cmd):
+                should_alert = True
+                rname = "Living-off-the-Land Obfuscated PowerShell Execution"
+                sev = "HIGH"
+                threat_cat = "LIVING_OFF_THE_LAND"
+                tactic = "Execution"
+                technique = "T1059.001 - PowerShell"
+                alert_reason = f"Obfuscated PowerShell script block executed on {hostname}: {cmdline[:140]}"
+
+            # Use Case 4: Data Staging for Exfiltration (T1560)
+            elif re.search(r"(compress-archive|tar\s+-[a-z]*z|7z\s+a|rar\s+a)", low_cmd):
+                should_alert = True
+                rname = "Data Staging for Exfiltration"
+                sev = "HIGH"
+                threat_cat = "EXFILTRATION"
+                tactic = "Collection"
+                technique = "T1560 - Archive Collected Data"
+                alert_reason = f"Suspicious archive creation targeting files for exfiltration: {cmdline[:140]}"
+
+            # Use Case 5: Rogue Persistence & Privilege Escalation (T1053.005 / T1078.003 / T1070.001)
+            elif eid in [4698, 4697, 4720, 4732, 1102]:
+                should_alert = True
+                threat_cat = "PERSISTENCE"
+                if eid == 1102:
+                    rname = "Windows Audit Log Cleared"
+                    sev = "CRITICAL"
+                    tactic = "Defense Evasion"
+                    technique = "T1070.001 - Clear Windows Event Logs"
+                    alert_reason = f"Security audit log was cleared/wiped on {hostname} by '{user}' (Anti-Forensics)"
+                elif eid == 4698:
+                    rname = "Rogue Scheduled Task Created"
+                    sev = "HIGH"
+                    tactic = "Persistence"
+                    technique = "T1053.005 - Scheduled Task"
+                elif eid == 4697:
+                    rname = "New System Service Installed"
+                    sev = "HIGH"
+                    tactic = "Persistence"
+                    technique = "T1543.003 - Windows Service"
+                elif eid == 4732:
+                    rname = "Member Added to Security Group"
+                    sev = "HIGH"
+                    tactic = "Privilege Escalation"
+                    technique = "T1078.003 - Local Accounts"
+                elif eid == 4720:
+                    rname = "Local User Account Created"
+                    sev = "HIGH"
+                    tactic = "Persistence"
+                    technique = "T1136.001 - Local Account"
+
+            # Fallback for standard high-severity audit events & failed logons
+            elif eid == 4625:
                 should_alert = True
                 rname = "Windows Logon Failure"
                 sev = "MEDIUM"
+                threat_cat = "CREDENTIAL_ACCESS"
                 tactic = "Credential Access"
                 technique = "T1110 - Brute Force"
-            elif eid in [4720, 4732, 4698]:
-                should_alert = True
-                sev = "HIGH"
-            elif eid == 4104:
-                if any(term in cmdline.lower() for term in SUSPICIOUS_CLI):
-                    should_alert = True
-                    rname = "Suspicious PowerShell Script Block"
-                    sev = "HIGH"
-                    tactic = "Execution"
-                    technique = "T1059.001 - PowerShell"
-                    alert_reason = f"Suspicious script block executed: {cmdline[:120]}"
             elif sev in ['HIGH', 'CRITICAL']:
                 should_alert = True
 
             if should_alert:
                 conn.execute("""
-                    INSERT INTO alerts (timestamp, severity, rule_name, description, src_ip, src_user, device_name, process, event_id, mitre_tactic, mitre_technique, raw_event, status)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'OPEN')
-                """, (now_iso, sev, rname, alert_reason, src_ip, user or hostname, hostname, proc or 'powershell.exe', eid, tactic, technique, raw_json_str))
+                    INSERT INTO alerts (timestamp, severity, rule_name, description, src_ip, src_user, device_name, process, event_id, mitre_tactic, mitre_technique, raw_event, status, threat_category)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'OPEN', ?)
+                """, (now_iso, sev, rname, alert_reason, src_ip, user or hostname, hostname, proc or 'powershell.exe', eid, tactic, technique, raw_json_str, threat_cat))
 
-        # 4. Check for suspicious running processes (Automated EDR containment alert)
-        SUSPICIOUS_NAMES = ['mimikatz.exe', 'nc.exe', 'ncat.exe', 'psexec.exe', 'wireshark.exe']
+        # 4. Check for anomalous outbound C2 network connections (Use Case 4: C2 Beaconing T1071)
+        C2_PORTS = {4444, 1337, 8888, 7070, 9001, 6667, 31337}
+        for c in data.get('connections', []):
+            rem = c.get('remote', '')
+            if ':' in rem:
+                try:
+                    rem_ip, rem_port = rem.rsplit(':', 1)
+                    if rem_port.isdigit() and int(rem_port) in C2_PORTS:
+                        conn.execute("""
+                            INSERT INTO alerts (timestamp, severity, rule_name, description, src_ip, src_user, device_name, process, event_id, mitre_tactic, mitre_technique, raw_event, status, threat_category)
+                            VALUES (?, 'HIGH', 'Malicious C2 Beaconing Detected', ?, ?, ?, ?, ?, 9002, 'Command and Control', 'T1071.001 - Web Protocols', ?, 'OPEN', 'EXFILTRATION')
+                        """, (now_iso, f"Outbound socket connection established to known C2 beacon port :{rem_port} ({rem})", rem_ip, hostname, hostname, f"PID:{c.get('pid', '-')}", json.dumps(c)))
+                except Exception:
+                    pass
+
+        # 5. Check for suspicious running processes (Automated EDR containment alert)
+        SUSPICIOUS_TOOLS = {
+            'mimikatz.exe': ('In-Memory Credential Dumping Tool', 'CREDENTIAL_ACCESS', 'T1003.001 - LSASS Memory'),
+            'nc.exe': ('Netcat Reverse Shell / C2 Utility', 'EXFILTRATION', 'T1071 - Application Layer Protocol'),
+            'ncat.exe': ('Ncat Network Tunneling Tool', 'EXFILTRATION', 'T1071 - Application Layer Protocol'),
+            'psexec.exe': ('PsExec Lateral Execution Utility', 'LIVING_OFF_THE_LAND', 'T1569.002 - Service Execution'),
+            'wireshark.exe': ('Network Sniffer Utility', 'CREDENTIAL_ACCESS', 'T1040 - Network Sniffing')
+        }
         for p in data.get('processes', []):
             pname = p.get('name', '').lower()
-            if any(bad in pname for bad in SUSPICIOUS_NAMES):
+            if pname in SUSPICIOUS_TOOLS:
+                tool_rname, tool_cat, tool_tech = SUSPICIOUS_TOOLS[pname]
                 conn.execute("""
-                    INSERT INTO alerts (timestamp, severity, rule_name, description, src_ip, src_user, device_name, process, event_id, mitre_tactic, mitre_technique, raw_event, status)
-                    VALUES (?, 'HIGH', 'Suspicious Tool on Remote Endpoint', ?, ?, ?, ?, ?, 1, 'Execution', 'T1059 - Command Execution', ?, 'OPEN')
-                """, (now_iso, f"Suspicious binary {pname} running on {hostname}", ip_addr, hostname, hostname, pname, json.dumps(p)))
+                    INSERT INTO alerts (timestamp, severity, rule_name, description, src_ip, src_user, device_name, process, event_id, mitre_tactic, mitre_technique, raw_event, status, threat_category)
+                    VALUES (?, 'HIGH', ?, ?, ?, ?, ?, ?, 1, 'Execution', ?, ?, 'OPEN', ?)
+                """, (now_iso, f"Suspicious Tool: {tool_rname}", f"Suspicious tool {pname} actively running on {hostname} (PID: {p.get('pid', '-')})", ip_addr, hostname, hostname, pname, tool_tech, json.dumps(p), tool_cat))
 
         conn.commit()
     finally:

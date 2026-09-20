@@ -13,6 +13,15 @@ def get_conn():
 
 def init_db():
     conn = get_conn()
+    # Ensure threat_category exists in alerts table if it already exists
+    try:
+        cols = [r['name'] for r in conn.execute("PRAGMA table_info(alerts)").fetchall()]
+        if cols and 'threat_category' not in cols:
+            conn.execute("ALTER TABLE alerts ADD COLUMN threat_category TEXT DEFAULT 'GENERAL'")
+            conn.commit()
+    except Exception:
+        pass
+
     with open(SCHEMA, 'r', encoding='utf-8') as f:
         conn.executescript(f.read())
     conn.commit()
