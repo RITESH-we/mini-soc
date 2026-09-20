@@ -28,6 +28,7 @@ def log_msg(msg: str):
     try:
         if sys.stdout is not None:
             print(formatted)
+            sys.stdout.flush()
     except Exception:
         pass
     try:
