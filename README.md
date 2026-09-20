@@ -82,7 +82,7 @@ It was engineered by identifying the foundational architectural bottlenecks, pro
 - Querying Windows Event Log via `/f:xml` using standard library `xml.etree.ElementTree` (zero third-party dependencies).
 - Extracts exact security fields: **`EventID`**, **`TargetUserName`**, **`IpAddress`**, **`LogonType`**, **`Status`**, **`SubStatus`**, **`CommandLine`**, and **`ParentProcessName`**.
 - **High-Watermark State Tracking**: Persists `EventRecordID` in `.agent_state.json`, eliminating duplicate alerts on subsequent heartbeats.
-- **Persistent Auto-Start Daemon**: Survives system reboots and power-offs. Features dual-tier auto-start on Windows (zero-privilege headless VBS startup runner + elevated Windows Task Scheduler) and native `systemd` service management on Linux with automatic failure recovery.
+- **Persistent Auto-Start Daemon**: Survives system reboots and power-offs. Engineered with zero-popup headless execution (`CREATE_NO_WINDOW` and `SW_HIDE` process flags ensuring zero CMD or console flashes during periodic EVTX/socket polling). Features dual-tier auto-start on Windows (zero-privilege headless VBS startup runner + elevated Windows Task Scheduler) and native `systemd` service management on Linux with automatic failure recovery.
 
 ### 2. Behavioral UEBA Risk Engine (Exabeam & Securonix Inspiration)
 - Computes real-time dynamic risk scores (0–100) for both **Hosts** and **Users**.

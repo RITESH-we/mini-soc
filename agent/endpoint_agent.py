@@ -13,6 +13,64 @@ import tempfile
 import re
 import xml.etree.ElementTree as ET
 
+# Prevent console window flash/popups when running under pythonw or background tasks on Windows
+if sys.stdout is None:
+    sys.stdout = open(os.devnull, "w", encoding="utf-8")
+if sys.stderr is None:
+    sys.stderr = open(os.devnull, "w", encoding="utf-8")
+
+LOG_FILE = os.path.join(tempfile.gettempdir(), "minisoc_agent.log")
+
+def log_msg(msg: str):
+    """Logs messages safely to stdout (if present) and to a persistent log file."""
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    formatted = f"[{timestamp}] {msg}"
+    try:
+        if sys.stdout is not None:
+            print(formatted)
+    except Exception:
+        pass
+    try:
+        with open(LOG_FILE, "a", encoding="utf-8") as f:
+            f.write(formatted + "\n")
+    except Exception:
+        pass
+
+def get_windows_hidden_flags():
+    """Return creationflags and STARTUPINFO to guarantee child console apps never spawn a window."""
+    flags = {}
+    if platform.system() == "Windows":
+        flags["creationflags"] = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
+        try:
+            si = subprocess.STARTUPINFO()
+            si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+            si.wShowWindow = 0  # SW_HIDE
+            flags["startupinfo"] = si
+        except Exception:
+            pass
+    return flags
+
+def silent_check_output(cmd, **kwargs):
+    """Executes a command and returns output with zero console popups on Windows."""
+    if platform.system() == "Windows":
+        for k, v in get_windows_hidden_flags().items():
+            kwargs.setdefault(k, v)
+    return subprocess.check_output(cmd, **kwargs)
+
+def silent_run(cmd, **kwargs):
+    """Runs a command with zero console popups on Windows."""
+    if platform.system() == "Windows":
+        for k, v in get_windows_hidden_flags().items():
+            kwargs.setdefault(k, v)
+    return subprocess.run(cmd, **kwargs)
+
+def silent_popen(cmd, **kwargs):
+    """Spawns a process with zero console popups on Windows."""
+    if platform.system() == "Windows":
+        for k, v in get_windows_hidden_flags().items():
+            kwargs.setdefault(k, v)
+    return subprocess.Popen(cmd, **kwargs)
+
 # Live public ngrok server endpoint by default
 DEFAULT_SERVER = "https://underfoot-such-italics.ngrok-free.dev/api/v1/telemetry"
 AGENT_VERSION = "2.2.0"
@@ -61,7 +119,7 @@ def get_active_connections():
     connections = []
     try:
         cmd = ["netstat", "-ano"] if platform.system() == "Windows" else ["netstat", "-tulnp"]
-        output = subprocess.check_output(cmd, stderr=subprocess.DEVNULL, universal_newlines=True)
+        output = silent_check_output(cmd, stderr=subprocess.DEVNULL, universal_newlines=True)
         for line in output.splitlines():
             line = line.strip()
             if line.startswith("TCP") or line.startswith("UDP") or line.startswith("tcp") or line.startswith("udp"):
@@ -83,7 +141,7 @@ def get_top_processes():
     try:
         if platform.system() == "Windows":
             cmd = ["tasklist", "/FO", "CSV", "/NH"]
-            output = subprocess.check_output(cmd, stderr=subprocess.DEVNULL, universal_newlines=True)
+            output = silent_check_output(cmd, stderr=subprocess.DEVNULL, universal_newlines=True)
             for line in output.splitlines():
                 if line.strip():
                     cols = [c.strip('"') for c in line.split('","')]
@@ -96,7 +154,7 @@ def get_top_processes():
                         })
         else:
             cmd = ["ps", "-eo", "pid,user,%cpu,%mem,comm", "--sort=-%mem"]
-            output = subprocess.check_output(cmd, stderr=subprocess.DEVNULL, universal_newlines=True)
+            output = silent_check_output(cmd, stderr=subprocess.DEVNULL, universal_newlines=True)
             for line in output.splitlines()[1:30]:
                 parts = line.split()
                 if len(parts) >= 5:
@@ -243,7 +301,7 @@ def get_security_audit_events():
         for chan_name, query in channels:
             try:
                 cmd = ["wevtutil", "qe", chan_name, f"/q:{query}", "/f:xml", "/c:10", "/rd:true"]
-                out = subprocess.check_output(cmd, stderr=subprocess.DEVNULL, universal_newlines=True)
+                out = silent_check_output(cmd, stderr=subprocess.DEVNULL, universal_newlines=True)
                 if not out or not out.strip():
                     continue
 
@@ -327,38 +385,34 @@ def execute_remediation(action_payload):
     
     if action == "kill_process" and target:
         if platform.system() == "Windows":
-            subprocess.run(["taskkill", "/F", "/PID", str(target)], capture_output=True)
+            silent_run(["taskkill", "/F", "/PID", str(target)], capture_output=True)
         else:
-            subprocess.run(["kill", "-9", str(target)], capture_output=True)
-        print(f"[!] Process {target} terminated by MiniSOC command.")
+            silent_run(["kill", "-9", str(target)], capture_output=True)
+        log_msg(f"[!] Process {target} terminated by MiniSOC command.")
         return f"Process {target} killed"
         
     elif action == "isolate_host":
         if platform.system() == "Windows":
-            subprocess.run([
+            silent_run([
                 "netsh", "advfirewall", "firewall", "add", "rule",
                 "name=MiniSOC_Endpoint_Quarantine", "dir=out", "action=block"
             ], capture_output=True)
         elif platform.system() == "Linux":
-            subprocess.run(["iptables", "-A", "OUTPUT", "-j", "DROP"], capture_output=True)
-        print("\n" + "!" * 65)
-        print("[!] >>> COMMAND RECEIVED: HOST ISOLATED FROM NETWORK <<<")
-        print("[!] Outbound traffic blocked by MiniSOC EDR quarantine rule.")
-        print("!" * 65 + "\n")
+            silent_run(["iptables", "-A", "OUTPUT", "-j", "DROP"], capture_output=True)
+        log_msg("[!] >>> COMMAND RECEIVED: HOST ISOLATED FROM NETWORK <<<")
+        log_msg("[!] Outbound traffic blocked by MiniSOC EDR quarantine rule.")
         return "Host isolated from network"
         
     elif action == "unisolate_host":
         if platform.system() == "Windows":
-            subprocess.run([
+            silent_run([
                 "netsh", "advfirewall", "firewall", "delete", "rule",
                 "name=MiniSOC_Endpoint_Quarantine"
             ], capture_output=True)
         elif platform.system() == "Linux":
-            subprocess.run(["iptables", "-D", "OUTPUT", "-j", "DROP"], capture_output=True)
-        print("\n" + "+" * 65)
-        print("[+] >>> COMMAND RECEIVED: HOST QUARANTINE REMOVED <<<")
-        print("[+] Outbound network connectivity fully restored.")
-        print("+" * 65 + "\n")
+            silent_run(["iptables", "-D", "OUTPUT", "-j", "DROP"], capture_output=True)
+        log_msg("[+] >>> COMMAND RECEIVED: HOST QUARANTINE REMOVED <<<")
+        log_msg("[+] Outbound network connectivity fully restored.")
         return "Host quarantine removed"
         
     return "No action taken"
@@ -394,19 +448,19 @@ def send_telemetry(server_url):
 
 def run_agent(server_url=DEFAULT_SERVER, interval=15):
     server_url = normalize_server_url(server_url)
-    print("=" * 60)
-    print(f"  MiniSOC Endpoint Agent v{AGENT_VERSION} (Log Shipper & EDR)")
-    print(f"  Target Server: {server_url}")
-    print(f"  Heartbeat Interval: {interval}s")
-    print("=" * 60)
+    log_msg("=" * 60)
+    log_msg(f"  MiniSOC Endpoint Agent v{AGENT_VERSION} (Log Shipper & EDR)")
+    log_msg(f"  Target Server: {server_url}")
+    log_msg(f"  Heartbeat Interval: {interval}s")
+    log_msg("=" * 60)
     
     while True:
         success, msg = send_telemetry(server_url)
         now_str = datetime.now().strftime("%H:%M:%S")
         if success:
-            print(f"[{now_str}] [+] Heartbeat & telemetry delivered to {server_url}")
+            log_msg(f"[{now_str}] [+] Heartbeat & telemetry delivered to {server_url}")
         else:
-            print(f"[{now_str}] [-] Heartbeat delivery failed: {msg}")
+            log_msg(f"[{now_str}] [-] Heartbeat delivery failed: {msg}")
         time.sleep(interval)
 
 def install_service(server_url=DEFAULT_SERVER):
@@ -433,11 +487,11 @@ def install_service(server_url=DEFAULT_SERVER):
             "/RL", "HIGHEST",
             "/F"
         ]
-        res = subprocess.run(create_cmd, capture_output=True, text=True)
+        res = silent_run(create_cmd, capture_output=True, text=True)
         if res.returncode == 0:
             print(f"[+] Successfully registered '{task_name}' in Windows Task Scheduler.")
             print("[+] Trigger: Automatic startup with HIGHEST privileges on user logon / boot.")
-            subprocess.run(["schtasks", "/Run", "/TN", task_name], capture_output=True)
+            silent_run(["schtasks", "/Run", "/TN", task_name], capture_output=True)
             print("[+] MiniSOC Agent is now running persistently in the background!")
             print("[+] You do NOT need to restart it after rebooting or powering off.")
             return True
@@ -454,7 +508,7 @@ def install_service(server_url=DEFAULT_SERVER):
                 print(f"[+] Successfully registered persistent background runner in Windows Startup:")
                 print(f"    -> {vbs_path}")
                 print("[+] Runs silently in background on every reboot / power-on without showing any black window.")
-                subprocess.Popen(["wscript.exe", vbs_path])
+                silent_popen(["wscript.exe", vbs_path])
                 print("[+] MiniSOC Agent launched successfully and active in background!")
                 print("[+] Auto-start is fully configured. You never need to run it again manually.")
                 return True
@@ -484,8 +538,8 @@ WantedBy=multi-user.target
         try:
             with open(service_path, "w") as f:
                 f.write(unit_content)
-            subprocess.run(["systemctl", "daemon-reload"], check=True)
-            subprocess.run(["systemctl", "enable", "--now", "minisoc-agent"], check=True)
+            silent_run(["systemctl", "daemon-reload"], check=True)
+            silent_run(["systemctl", "enable", "--now", "minisoc-agent"], check=True)
             print(f"[+] Successfully created and enabled systemd service: {service_path}")
             print("[+] Agent is now running persistently across all system reboots.")
             return True
@@ -506,8 +560,8 @@ def uninstall_service():
 
     if system == "Windows":
         task_name = "MiniSOC_Endpoint_Agent"
-        subprocess.run(["schtasks", "/End", "/TN", task_name], capture_output=True)
-        res = subprocess.run(["schtasks", "/Delete", "/TN", task_name, "/F"], capture_output=True)
+        silent_run(["schtasks", "/End", "/TN", task_name], capture_output=True)
+        res = silent_run(["schtasks", "/Delete", "/TN", task_name, "/F"], capture_output=True)
         if res.returncode == 0:
             print(f"[+] Removed Task Scheduler task '{task_name}'.")
             removed = True
@@ -523,7 +577,7 @@ def uninstall_service():
                 print(f"[-] Could not remove {vbs_path}: {e}")
 
         # Terminate running pythonw agent process
-        subprocess.run(["taskkill", "/F", "/IM", "pythonw.exe"], capture_output=True)
+        silent_run(["taskkill", "/F", "/IM", "pythonw.exe"], capture_output=True)
         if removed:
             print("[+] MiniSOC Agent uninstalled successfully.")
             return True
@@ -534,10 +588,10 @@ def uninstall_service():
     elif system == "Linux":
         service_path = "/etc/systemd/system/minisoc-agent.service"
         try:
-            subprocess.run(["systemctl", "disable", "--now", "minisoc-agent"], capture_output=True)
+            silent_run(["systemctl", "disable", "--now", "minisoc-agent"], capture_output=True)
             if os.path.exists(service_path):
                 os.remove(service_path)
-            subprocess.run(["systemctl", "daemon-reload"], capture_output=True)
+            silent_run(["systemctl", "daemon-reload"], capture_output=True)
             print("[+] MiniSOC systemd service removed.")
             return True
         except Exception as e:
@@ -558,7 +612,16 @@ if __name__ == "__main__":
         uninstall_service()
     elif "--status" in args:
         if platform.system() == "Windows":
-            subprocess.run(["schtasks", "/Query", "/TN", "MiniSOC_Endpoint_Agent", "/FO", "LIST", "/V"])
+            res = silent_run(["schtasks", "/Query", "/TN", "MiniSOC_Endpoint_Agent", "/FO", "LIST", "/V"], capture_output=True, text=True)
+            if res.returncode == 0:
+                print(res.stdout)
+            else:
+                startup_dir = os.path.join(os.environ.get('APPDATA', ''), 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup')
+                vbs_path = os.path.join(startup_dir, "minisoc_agent.vbs")
+                if os.path.exists(vbs_path):
+                    print(f"[+] MiniSOC Agent installed in Startup folder: {vbs_path}")
+                else:
+                    print("[-] No installed MiniSOC background service found.")
         else:
             subprocess.run(["systemctl", "status", "minisoc-agent"])
     else:
