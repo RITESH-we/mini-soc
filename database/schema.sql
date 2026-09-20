@@ -95,3 +95,14 @@ CREATE TABLE IF NOT EXISTS entity_risk_scores (
     factors      TEXT,
     last_updated TEXT
 );
+
+-- High-Performance Enterprise Compound Indexes
+CREATE INDEX IF NOT EXISTS idx_alerts_device_ts ON alerts(device_name, timestamp);
+CREATE INDEX IF NOT EXISTS idx_alerts_user_ts ON alerts(src_user, timestamp);
+CREATE INDEX IF NOT EXISTS idx_alerts_status ON alerts(status, timestamp);
+CREATE INDEX IF NOT EXISTS idx_alerts_severity ON alerts(severity);
+CREATE INDEX IF NOT EXISTS idx_telemetry_host_ts ON telemetry_logs(hostname, timestamp);
+CREATE INDEX IF NOT EXISTS idx_telemetry_type ON telemetry_logs(log_type, timestamp);
+CREATE INDEX IF NOT EXISTS idx_network_alerts_ip ON network_alerts(src_ip, timestamp);
+CREATE INDEX IF NOT EXISTS idx_blocked_ips_active ON blocked_ips(active, ip_address);
+CREATE INDEX IF NOT EXISTS idx_endpoints_heartbeat ON endpoints(last_heartbeat);

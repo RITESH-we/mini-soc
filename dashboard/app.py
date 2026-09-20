@@ -205,39 +205,58 @@ def enrich_alert(aid):
     from enrichers.abuseipdb  import lookup_ip as abuse_ip
     from enrichers.threatfox  import lookup_ioc as tf_lookup
     from enrichers.otx        import lookup_ip as otx_ip
+    from network.ips_responder import is_private_ip
 
     conn  = get_conn()
-    alert = conn.execute('SELECT * FROM alerts WHERE id=?', (aid,)).fetchone()
-    if not alert:
+    try:
+        alert = conn.execute('SELECT * FROM alerts WHERE id=?', (aid,)).fetchone()
+        if not alert:
+            return jsonify({'error': 'not found'}), 404
+            
+        ip = (alert['src_ip'] or '').strip()
+
+        # Check if internal private or loopback IP (RFC 1918)
+        if not ip or is_private_ip(ip):
+            vt_score = "Internal (RFC 1918)" if ip else "N/A"
+            abuse_score = 0
+            conn.execute('UPDATE alerts SET enriched=1, vt_score=?, abuse_score=? WHERE id=?',
+                         (vt_score, abuse_score, aid))
+            conn.commit()
+            return jsonify({
+                'vt_score': vt_score,
+                'abuse_score': abuse_score,
+                'threatfox': {'status': 'Internal RFC 1918 / Loopback Address (External Lookup Skipped)'},
+                'otx': {'status': 'Internal Network'},
+                'country': 'Local LAN / Host',
+                'isp': 'Private RFC 1918'
+            })
+
+        vt_key    = config.get('api_keys', {}).get('virustotal')
+        abuse_key = config.get('api_keys', {}).get('abuseipdb')
+        otx_key   = config.get('api_keys', {}).get('otx')
+
+        vt_result    = vt_ip(ip, vt_key)
+        abuse_result = abuse_ip(ip, abuse_key)
+        tf_result    = tf_lookup(ip)
+        otx_result   = otx_ip(ip, otx_key)
+
+        vt_score    = vt_result.get('score', 'N/A')
+        abuse_score = abuse_result.get('score', -1)
+
+        conn.execute('UPDATE alerts SET enriched=1, vt_score=?, abuse_score=? WHERE id=?',
+                     (vt_score, abuse_score, aid))
+        conn.commit()
+
+        return jsonify({
+            'vt_score': vt_score,
+            'abuse_score': abuse_score,
+            'threatfox': tf_result,
+            'otx': otx_result,
+            'country': vt_result.get('country', '') or abuse_result.get('country', ''),
+            'isp': abuse_result.get('isp', '')
+        })
+    finally:
         conn.close()
-        return jsonify({'error': 'not found'}), 404
-        
-    ip        = alert['src_ip']
-    vt_key    = config.get('api_keys', {}).get('virustotal')
-    abuse_key = config.get('api_keys', {}).get('abuseipdb')
-    otx_key   = config.get('api_keys', {}).get('otx')
-
-    vt_result    = vt_ip(ip, vt_key) if ip else {}
-    abuse_result = abuse_ip(ip, abuse_key) if ip else {}
-    tf_result    = tf_lookup(ip) if ip else {}
-    otx_result   = otx_ip(ip, otx_key) if ip else {}
-
-    vt_score    = vt_result.get('score', 'N/A')
-    abuse_score = abuse_result.get('score', -1)
-
-    conn.execute('UPDATE alerts SET enriched=1, vt_score=?, abuse_score=? WHERE id=?',
-                 (vt_score, abuse_score, aid))
-    conn.commit()
-    conn.close()
-
-    return jsonify({
-        'vt_score': vt_score,
-        'abuse_score': abuse_score,
-        'threatfox': tf_result,
-        'otx': otx_result,
-        'country': vt_result.get('country', '') or abuse_result.get('country', ''),
-        'isp': abuse_result.get('isp', '')
-    })
 
 # ── Update Alert Status ───────────────────────────────────────
 @app.route('/api/alert/<int:aid>/status', methods=['POST'])
@@ -316,17 +335,33 @@ def network_view():
 
 @app.route('/network/block', methods=['POST'])
 def handle_manual_block():
-    ip = request.form.get('ip_address')
+    ip = (request.form.get('ip_address') or '').strip()
     reason = request.form.get('reason', 'Analyst Manual Block')
     if ip:
         block_ip(ip, reason=reason)
+        # Push proactive EDR drop rule down to all active endpoint agents
+        conn = get_conn()
+        try:
+            cmd_json = json.dumps({"action": "block_remote_ip", "target": ip, "reason": reason})
+            conn.execute("UPDATE endpoints SET pending_command=? WHERE status != 'OFFLINE'", (cmd_json,))
+            conn.commit()
+        finally:
+            conn.close()
     return redirect(url_for('network_view'))
 
 @app.route('/network/unblock', methods=['POST'])
 def handle_unblock():
-    ip = request.form.get('ip_address')
+    ip = (request.form.get('ip_address') or '').strip()
     if ip:
         unblock_ip(ip)
+        # Push unblock command to active endpoints
+        conn = get_conn()
+        try:
+            cmd_json = json.dumps({"action": "unblock_remote_ip", "target": ip})
+            conn.execute("UPDATE endpoints SET pending_command=? WHERE status != 'OFFLINE'", (cmd_json,))
+            conn.commit()
+        finally:
+            conn.close()
     return redirect(url_for('network_view'))
 
 @app.route('/api/network/inspect')
@@ -339,23 +374,27 @@ def api_network_inspect():
 @app.route('/agents')
 def agents_view():
     conn = get_conn()
-    rows = conn.execute("SELECT * FROM endpoints ORDER BY last_heartbeat DESC").fetchall()
-    conn.close()
-    return render_template('agents.html', endpoints=[dict(r) for r in rows], server_ip="127.0.0.1")
+    try:
+        rows = conn.execute("SELECT * FROM endpoints ORDER BY last_heartbeat DESC").fetchall()
+        return render_template('agents.html', endpoints=[dict(r) for r in rows], server_ip="127.0.0.1")
+    finally:
+        conn.close()
 
 @app.route('/api/agents/<hostname>/logs')
 def agent_logs(hostname):
     conn = get_conn()
-    procs = conn.execute("SELECT * FROM telemetry_logs WHERE hostname=? AND log_type='PROCESS' ORDER BY id DESC LIMIT 25", (hostname,)).fetchall()
-    conns = conn.execute("SELECT * FROM telemetry_logs WHERE hostname=? AND log_type='NETWORK_CONN' ORDER BY id DESC LIMIT 25", (hostname,)).fetchall()
-    evts  = conn.execute("SELECT * FROM telemetry_logs WHERE hostname=? AND log_type='SECURITY_EVENT' ORDER BY id DESC LIMIT 15", (hostname,)).fetchall()
-    conn.close()
-    return jsonify({
-        'hostname': hostname,
-        'processes': [dict(p) for p in procs],
-        'connections': [dict(c) for c in conns],
-        'events': [dict(e) for e in evts]
-    })
+    try:
+        procs = conn.execute("SELECT * FROM telemetry_logs WHERE hostname=? AND log_type='PROCESS' ORDER BY id DESC LIMIT 25", (hostname,)).fetchall()
+        conns = conn.execute("SELECT * FROM telemetry_logs WHERE hostname=? AND log_type='NETWORK_CONN' ORDER BY id DESC LIMIT 25", (hostname,)).fetchall()
+        evts  = conn.execute("SELECT * FROM telemetry_logs WHERE hostname=? AND log_type='SECURITY_EVENT' ORDER BY id DESC LIMIT 15", (hostname,)).fetchall()
+        return jsonify({
+            'hostname': hostname,
+            'processes': [dict(p) for p in procs],
+            'connections': [dict(c) for c in conns],
+            'events': [dict(e) for e in evts]
+        })
+    finally:
+        conn.close()
 
 @app.route('/api/v1/telemetry', methods=['POST'])
 def receive_telemetry():
@@ -368,114 +407,131 @@ def receive_telemetry():
     ip_addr  = sys_info.get('ip_address', '127.0.0.1')
     os_name  = sys_info.get('os', 'Unknown OS')
     arch     = sys_info.get('architecture', 'x86_64')
-    ver      = sys_info.get('agent_version', '2.1.0')
+    ver      = sys_info.get('agent_version', '2.2.0')
     now_iso  = datetime.now().isoformat()
+    posture  = data.get('security_posture', {})
 
     conn = get_conn()
-    
-    # 1. Check if an analyst ordered host isolation or network restore
-    ep_row = conn.execute("SELECT pending_command, status FROM endpoints WHERE hostname=?", (hostname,)).fetchone()
-    cmd_to_send = None
-    if ep_row and ep_row['pending_command']:
-        cmd_to_send = {"action": ep_row['pending_command']}
-        conn.execute("UPDATE endpoints SET pending_command=NULL WHERE hostname=?", (hostname,))
+    try:
+        # 1. Check for pending SOAR containment / defense commands for this endpoint
+        ep_row = conn.execute("SELECT pending_command, status FROM endpoints WHERE hostname=?", (hostname,)).fetchone()
+        cmd_to_send = None
+        if ep_row and ep_row['pending_command']:
+            raw_cmd = ep_row['pending_command']
+            if raw_cmd.startswith("{"):
+                try:
+                    cmd_to_send = json.loads(raw_cmd)
+                except Exception:
+                    cmd_to_send = {"action": raw_cmd}
+            else:
+                cmd_to_send = {"action": raw_cmd}
+            conn.execute("UPDATE endpoints SET pending_command=NULL WHERE hostname=?", (hostname,))
 
-    # Update or insert endpoint record
-    current_status = ep_row['status'] if ep_row else 'ONLINE'
-    conn.execute("""
-        INSERT INTO endpoints (hostname, ip_address, os, architecture, agent_version, last_heartbeat, status)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(hostname) DO UPDATE SET
-            ip_address=excluded.ip_address,
-            os=excluded.os,
-            architecture=excluded.architecture,
-            agent_version=excluded.agent_version,
-            last_heartbeat=excluded.last_heartbeat
-    """, (hostname, ip_addr, os_name, arch, ver, now_iso, current_status))
-
-    # 2. Store live telemetry into telemetry_logs table
-    for p in data.get('processes', [])[:20]:
-        p_desc = f"{p.get('name', 'unknown')} | PID: {p.get('pid', '-')} | Mem: {p.get('mem_usage', p.get('mem', '-'))}"
+        # Update or insert endpoint record
+        current_status = ep_row['status'] if ep_row else 'ONLINE'
         conn.execute("""
-            INSERT INTO telemetry_logs (hostname, timestamp, log_type, details, process_name)
-            VALUES (?, ?, 'PROCESS', ?, ?)
-        """, (hostname, now_iso, p_desc, p.get('name', '')))
+            INSERT INTO endpoints (hostname, ip_address, os, architecture, agent_version, last_heartbeat, status)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(hostname) DO UPDATE SET
+                ip_address=excluded.ip_address,
+                os=excluded.os,
+                architecture=excluded.architecture,
+                agent_version=excluded.agent_version,
+                last_heartbeat=excluded.last_heartbeat
+        """, (hostname, ip_addr, os_name, arch, ver, now_iso, current_status))
 
-    for c in data.get('connections', [])[:15]:
-        c_desc = f"{c.get('proto', 'TCP')} | Remote: {c.get('remote', '-')} | State: {c.get('state', '-')} | PID: {c.get('pid', '-')}"
-        remote_ip = c.get('remote', '').split(':')[0] if ':' in c.get('remote', '') else ''
-        conn.execute("""
-            INSERT INTO telemetry_logs (hostname, timestamp, log_type, details, src_ip)
-            VALUES (?, ?, 'NETWORK_CONN', ?, ?)
-        """, (hostname, now_iso, c_desc, remote_ip))
+        # Store security posture telemetry if provided
+        if posture:
+            p_desc = f"Antivirus: {posture.get('antivirus')} | Firewall: {posture.get('firewall')} | Admin Privileges: {posture.get('is_admin')}"
+            conn.execute("""
+                INSERT INTO telemetry_logs (hostname, timestamp, log_type, details)
+                VALUES (?, ?, 'SECURITY_POSTURE', ?)
+            """, (hostname, now_iso, p_desc))
 
-    # 3. Process structured security audit events (OCSF/ECS compliant)
-    SUSPICIOUS_CLI = ['mimikatz', 'invoke-', 'downloadstring', '-enc ', 'bypass', 'iex ', 'net user', 'whoami /priv']
-    user_seen = None
+        # 2. Store live telemetry into telemetry_logs table
+        for p in data.get('processes', [])[:20]:
+            p_desc = f"{p.get('name', 'unknown')} | PID: {p.get('pid', '-')} | Mem: {p.get('mem_usage', p.get('mem', '-'))}"
+            conn.execute("""
+                INSERT INTO telemetry_logs (hostname, timestamp, log_type, details, process_name)
+                VALUES (?, ?, 'PROCESS', ?, ?)
+            """, (hostname, now_iso, p_desc, p.get('name', '')))
 
-    for ev in data.get('events', []):
-        eid = ev.get('event_id')
-        user = ev.get('user') or ''
-        if user and not user_seen:
-            user_seen = user
-        src_ip = ev.get('src_ip') or ip_addr
-        proc = ev.get('process') or ''
-        cmdline = ev.get('command_line') or ''
-        sev = ev.get('severity', 'LOW')
-        rname = ev.get('rule_name', 'Security Event')
-        tactic = ev.get('mitre_tactic', 'Execution')
-        technique = ev.get('mitre_technique', 'T1059 - Command Execution')
-        details = ev.get('details') or f"Event {eid} on {hostname}"
-        raw_json_str = json.dumps(ev)
+        for c in data.get('connections', [])[:15]:
+            c_desc = f"{c.get('proto', 'TCP')} | Remote: {c.get('remote', '-')} | State: {c.get('state', '-')} | PID: {c.get('pid', '-')}"
+            remote_ip = c.get('remote', '').split(':')[0] if ':' in c.get('remote', '') else ''
+            conn.execute("""
+                INSERT INTO telemetry_logs (hostname, timestamp, log_type, details, src_ip)
+                VALUES (?, ?, 'NETWORK_CONN', ?, ?)
+            """, (hostname, now_iso, c_desc, remote_ip))
 
-        # Store into telemetry_logs with structured columns
-        conn.execute("""
-            INSERT INTO telemetry_logs (hostname, timestamp, log_type, details, event_id, user_name, src_ip, process_name, raw_json)
-            VALUES (?, ?, 'SECURITY_EVENT', ?, ?, ?, ?, ?, ?)
-        """, (hostname, now_iso, details, eid, user, src_ip, proc, raw_json_str))
+        # 3. Process structured security audit events (OCSF/ECS compliant)
+        SUSPICIOUS_CLI = ['mimikatz', 'invoke-', 'downloadstring', '-enc ', 'bypass', 'iex ', 'net user', 'whoami /priv']
+        user_seen = None
 
-        # Actionable security alerts triage
-        should_alert = False
-        alert_reason = details
+        for ev in data.get('events', []):
+            eid = ev.get('event_id')
+            user = ev.get('user') or ''
+            if user and not user_seen:
+                user_seen = user
+            src_ip = ev.get('src_ip') or ip_addr
+            proc = ev.get('process') or ''
+            cmdline = ev.get('command_line') or ''
+            sev = ev.get('severity', 'LOW')
+            rname = ev.get('rule_name', 'Security Event')
+            tactic = ev.get('mitre_tactic', 'Execution')
+            technique = ev.get('mitre_technique', 'T1059 - Command Execution')
+            details = ev.get('details') or f"Event {eid} on {hostname}"
+            raw_json_str = json.dumps(ev)
 
-        if eid == 4625:
-            should_alert = True
-            rname = "Windows Logon Failure"
-            sev = "MEDIUM"
-            tactic = "Credential Access"
-            technique = "T1110 - Brute Force"
-        elif eid in [4720, 4732, 4698]:
-            should_alert = True
-            sev = "HIGH"
-        elif eid == 4104:
-            if any(term in cmdline.lower() for term in SUSPICIOUS_CLI):
+            # Store into telemetry_logs with structured columns
+            conn.execute("""
+                INSERT INTO telemetry_logs (hostname, timestamp, log_type, details, event_id, user_name, src_ip, process_name, raw_json)
+                VALUES (?, ?, 'SECURITY_EVENT', ?, ?, ?, ?, ?, ?)
+            """, (hostname, now_iso, details, eid, user, src_ip, proc, raw_json_str))
+
+            # Actionable security alerts triage
+            should_alert = False
+            alert_reason = details
+
+            if eid == 4625:
                 should_alert = True
-                rname = "Suspicious PowerShell Script Block"
+                rname = "Windows Logon Failure"
+                sev = "MEDIUM"
+                tactic = "Credential Access"
+                technique = "T1110 - Brute Force"
+            elif eid in [4720, 4732, 4698]:
+                should_alert = True
                 sev = "HIGH"
-                tactic = "Execution"
-                technique = "T1059.001 - PowerShell"
-                alert_reason = f"Suspicious script block executed: {cmdline[:120]}"
-        elif sev in ['HIGH', 'CRITICAL']:
-            should_alert = True
+            elif eid == 4104:
+                if any(term in cmdline.lower() for term in SUSPICIOUS_CLI):
+                    should_alert = True
+                    rname = "Suspicious PowerShell Script Block"
+                    sev = "HIGH"
+                    tactic = "Execution"
+                    technique = "T1059.001 - PowerShell"
+                    alert_reason = f"Suspicious script block executed: {cmdline[:120]}"
+            elif sev in ['HIGH', 'CRITICAL']:
+                should_alert = True
 
-        if should_alert:
-            conn.execute("""
-                INSERT INTO alerts (timestamp, severity, rule_name, description, src_ip, src_user, device_name, process, event_id, mitre_tactic, mitre_technique, raw_event, status)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'OPEN')
-            """, (now_iso, sev, rname, alert_reason, src_ip, user or hostname, hostname, proc or 'powershell.exe', eid, tactic, technique, raw_json_str))
+            if should_alert:
+                conn.execute("""
+                    INSERT INTO alerts (timestamp, severity, rule_name, description, src_ip, src_user, device_name, process, event_id, mitre_tactic, mitre_technique, raw_event, status)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'OPEN')
+                """, (now_iso, sev, rname, alert_reason, src_ip, user or hostname, hostname, proc or 'powershell.exe', eid, tactic, technique, raw_json_str))
 
-    # 4. Check for suspicious running processes
-    SUSPICIOUS_NAMES = ['mimikatz.exe', 'nc.exe', 'ncat.exe', 'psexec.exe', 'wireshark.exe']
-    for p in data.get('processes', []):
-        pname = p.get('name', '').lower()
-        if any(bad in pname for bad in SUSPICIOUS_NAMES):
-            conn.execute("""
-                INSERT INTO alerts (timestamp, severity, rule_name, description, src_ip, src_user, device_name, process, event_id, mitre_tactic, mitre_technique, raw_event, status)
-                VALUES (?, 'HIGH', 'Suspicious Tool on Remote Endpoint', ?, ?, ?, ?, ?, 1, 'Execution', 'T1059 - Command Execution', ?, 'OPEN')
-            """, (now_iso, f"Suspicious binary {pname} running on {hostname}", ip_addr, hostname, hostname, pname, json.dumps(p)))
+        # 4. Check for suspicious running processes (Automated EDR containment alert)
+        SUSPICIOUS_NAMES = ['mimikatz.exe', 'nc.exe', 'ncat.exe', 'psexec.exe', 'wireshark.exe']
+        for p in data.get('processes', []):
+            pname = p.get('name', '').lower()
+            if any(bad in pname for bad in SUSPICIOUS_NAMES):
+                conn.execute("""
+                    INSERT INTO alerts (timestamp, severity, rule_name, description, src_ip, src_user, device_name, process, event_id, mitre_tactic, mitre_technique, raw_event, status)
+                    VALUES (?, 'HIGH', 'Suspicious Tool on Remote Endpoint', ?, ?, ?, ?, ?, 1, 'Execution', 'T1059 - Command Execution', ?, 'OPEN')
+                """, (now_iso, f"Suspicious binary {pname} running on {hostname}", ip_addr, hostname, hostname, pname, json.dumps(p)))
 
-    conn.commit()
-    conn.close()
+        conn.commit()
+    finally:
+        conn.close()
 
     # 5. Dynamic UEBA Behavioral Risk Scoring
     calculate_entity_risk(hostname, "HOST")

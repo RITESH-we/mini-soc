@@ -78,13 +78,18 @@ It was engineered by identifying the foundational architectural bottlenecks, pro
 
 ## 🌟 Key Capabilities
 
-### 1. Structured XML Telemetry & State-Tracked Deduplication
+### 1. Structured XML Telemetry, Deduplication & At-Least-Once Delivery
 - Querying Windows Event Log via `/f:xml` using standard library `xml.etree.ElementTree` (zero third-party dependencies).
 - Extracts exact security fields: **`EventID`**, **`TargetUserName`**, **`IpAddress`**, **`LogonType`**, **`Status`**, **`SubStatus`**, **`CommandLine`**, and **`ParentProcessName`**.
-- **High-Watermark State Tracking**: Persists `EventRecordID` in `.agent_state.json`, eliminating duplicate alerts on subsequent heartbeats.
+- **At-Least-Once Delivery Architecture**: The high-watermark state is only committed to disk *after* the SOC server returns an HTTP 200 acknowledgement. If network connectivity drops or the server reboots, telemetry is retained in memory and re-transmitted, guaranteeing zero event loss.
 - **Persistent Auto-Start Daemon**: Survives system reboots and power-offs. Engineered with zero-popup headless execution (`CREATE_NO_WINDOW` and `SW_HIDE` process flags ensuring zero CMD or console flashes during periodic EVTX/socket polling). Features dual-tier auto-start on Windows (zero-privilege headless VBS startup runner + elevated Windows Task Scheduler) and native `systemd` service management on Linux with automatic failure recovery.
+- **Continuous Security Posture Auditing**: Automatically reports local Antivirus engine health (Windows Defender service state), Windows Firewall profile enforcement (Domain/Private/Public), and administrative privilege elevation.
 
-### 2. Behavioral UEBA Risk Engine (Exabeam & Securonix Inspiration)
+### 2. High-Concurrency Storage & Indexing Engine (WAL Mode)
+- **SQLite Write-Ahead Logging (WAL)**: Configured `PRAGMA journal_mode = WAL`, `synchronous = NORMAL`, and `busy_timeout = 10000`, enabling non-blocking concurrent reads and writes across simultaneous agent telemetry streams and analyst queries.
+- **Compound B-Tree Indexing**: Dedicated multi-column indexes on `alerts(device_name, timestamp)`, `alerts(src_user, timestamp)`, `alerts(status)`, and `telemetry_logs(hostname, timestamp)` eliminating full-table scans.
+
+### 3. Behavioral UEBA Risk Engine (Exabeam & Securonix Inspiration)
 - Computes real-time dynamic risk scores (0–100) for both **Hosts** and **Users**.
 - Behavioral scoring matrix:
   - Repeated authentication failures: $+15$ pts
@@ -92,15 +97,17 @@ It was engineered by identifying the foundational architectural bottlenecks, pro
   - Privilege tampering & security group additions: $+35$ pts
   - Dynamic risk tiers: `LOW (0-24)`, `MEDIUM (25-49)`, `HIGH (50-74)`, `CRITICAL (75-100)`
 
-### 3. Multi-Feed Threat Intelligence Hub
+### 4. Multi-Feed Threat Intelligence Hub & RFC 1918 Guard
 - Integrated **AlienVault OTX**, **VirusTotal v3**, **AbuseIPDB**, and **abuse.ch ThreatFox** (zero API key needed for public feeds).
+- **Private RFC 1918 Filter**: Automatically detects internal/loopback traffic, returning instant LAN classification without wasting external API quota.
 
-### 4. Active Host Defense & Network IPS (SOAR)
-- **1-Click Host Quarantine**: Instantly isolates infected endpoints from the network using bidirectional firewall rules.
-- **Firewall Containment (`netsh` / `iptables`)**: Enforces kernel-level drops on malicious remote IPs with RFC 1918 loopback fail-safes.
-- **Live NSM Inspection**: Continuously detects port sweeps (T1046) and cleartext protocol leaks (T1040).
+### 5. Proactive Endpoint Defense & SOAR Containment (EDR)
+- **Endpoint-Edge Firewall Drops**: When an analyst or IPS rule blocks an IP, the command is dispatched down to all active endpoint agents, enforcing kernel-level firewall drops (`netsh advfirewall` / `iptables`) on the devices themselves.
+- **1-Click Host Quarantine with SOC Fail-Safe**: Instantly isolates compromised endpoints from lateral movement and external networks while preserving the SOC management communication channel.
+- **Autonomous Process Termination**: Remote and automated termination of attacker tooling (`mimikatz`, `nc.exe`, `psexec.exe`).
+- **Live NSM Inspection**: Robust IPv4/IPv6 socket inspection detecting inbound port sweeps (T1046) and cleartext protocol exposure (T1040).
 
-### 5. 🤖 Nova — Autonomous AI SOC Analyst Co-Pilot
+### 6. 🤖 Nova — Autonomous AI SOC Analyst Co-Pilot
 - Interactive AI co-pilot embedded in the dashboard.
 - **1-Click RCA**: Generates human-grade Root Cause Analysis narratives, blast radius estimates, and containment recommendations.
 - **NIST SP 800-61 Rev 2 Reports**: Generates formal incident PDF reports in 1 click.

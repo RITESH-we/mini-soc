@@ -10,6 +10,36 @@ from network.ips_responder import block_ip
 # Port Scan tracker: {remote_ip: [(timestamp, port)]}
 _scan_tracker = defaultdict(list)
 
+def get_hidden_subprocess_flags():
+    flags = {}
+    if platform.system() == "Windows":
+        flags["creationflags"] = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
+        try:
+            si = subprocess.STARTUPINFO()
+            si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+            si.wShowWindow = 0
+            flags["startupinfo"] = si
+        except Exception:
+            pass
+    return flags
+
+def parse_socket_endpoint(endpoint_str: str):
+    """Accurately parses IP and port from IPv4 or IPv6 socket string without truncation."""
+    endpoint_str = endpoint_str.strip()
+    if endpoint_str.startswith("["):
+        if "]:" in endpoint_str:
+            ip_part, port_part = endpoint_str.split("]:", 1)
+            ip = ip_part.lstrip("[")
+            port = int(port_part) if port_part.isdigit() else 0
+            return ip, port
+        return endpoint_str.strip("[]"), 0
+    elif ":" in endpoint_str:
+        parts = endpoint_str.rsplit(":", 1)
+        ip = parts[0]
+        port = int(parts[1]) if parts[1].isdigit() else 0
+        return ip, port
+    return endpoint_str, 0
+
 # Insecure/cleartext ports to flag
 UNENCRYPTED_PORTS = {
     21: "FTP (Plaintext Credentials)",
@@ -22,12 +52,14 @@ UNENCRYPTED_PORTS = {
 
 def record_network_alert(rule_name, severity, src_ip, dest_port, protocol, details, mitre_technique):
     conn = get_conn()
-    conn.execute("""
-        INSERT INTO network_alerts (timestamp, rule_name, severity, src_ip, dest_port, protocol, details, mitre_technique)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    """, (datetime.now().isoformat(), rule_name, severity, src_ip, dest_port, protocol, details, mitre_technique))
-    conn.commit()
-    conn.close()
+    try:
+        conn.execute("""
+            INSERT INTO network_alerts (timestamp, rule_name, severity, src_ip, dest_port, protocol, details, mitre_technique)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """, (datetime.now().isoformat(), rule_name, severity, src_ip, dest_port, protocol, details, mitre_technique))
+        conn.commit()
+    finally:
+        conn.close()
 
 def inspect_network_activity(auto_block=False):
     """
@@ -38,7 +70,9 @@ def inspect_network_activity(auto_block=False):
     
     try:
         cmd = ["netstat", "-ano"] if platform.system() == "Windows" else ["netstat", "-tulnpa"]
-        output = subprocess.check_output(cmd, stderr=subprocess.DEVNULL, universal_newlines=True)
+        kwargs = {"stderr": subprocess.DEVNULL, "universal_newlines": True}
+        kwargs.update(get_hidden_subprocess_flags())
+        output = subprocess.check_output(cmd, **kwargs)
         
         for line in output.splitlines():
             parts = line.strip().split()
@@ -48,12 +82,8 @@ def inspect_network_activity(auto_block=False):
                 remote = parts[2]
                 state = parts[3] if len(parts) > 4 else "UNKNOWN"
                 
-                if ":" in remote and not remote.startswith("127.0.0.1") and not remote.startswith("0.0.0.0") and not remote.startswith("[::]"):
-                    remote_ip = remote.split(":")[0]
-                    try:
-                        remote_port = int(remote.split(":")[-1])
-                    except ValueError:
-                        remote_port = 0
+                remote_ip, remote_port = parse_socket_endpoint(remote)
+                if remote_ip and not remote_ip.startswith("127.0.0.1") and not remote_ip.startswith("0.0.0.0") and remote_ip != "::" and remote_ip != "::1":
                         
                     # 1. Port scan heuristic: Track ports hit per remote IP in 15 seconds
                     _scan_tracker[remote_ip].append((now, remote_port))

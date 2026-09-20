@@ -283,15 +283,86 @@ def _parse_xml_event(node) -> dict:
     except Exception:
         return None
 
+def commit_agent_state(pending_state: dict):
+    """
+    At-Least-Once Delivery: Persists high-watermark state to disk ONLY after
+    the server confirms receipt with an HTTP 200 status code.
+    """
+    if not pending_state:
+        return
+    try:
+        state = load_agent_state()
+        if "last_records" in pending_state:
+            if "last_records" not in state:
+                state["last_records"] = {}
+            for k, v in pending_state["last_records"].items():
+                state["last_records"][k] = max(state["last_records"].get(k, 0), v)
+        if "linux_offset" in pending_state:
+            state["linux_offset"] = pending_state["linux_offset"]
+        save_agent_state(state)
+    except Exception as e:
+        log_msg(f"[-] Warning: Failed to commit agent state: {e}")
+
+def get_security_posture():
+    """
+    Audits local host security posture: Windows Defender / Antivirus status,
+    Firewall profile state, and administrator execution level.
+    """
+    posture = {
+        "antivirus": "Unknown",
+        "firewall": "Unknown",
+        "is_admin": False
+    }
+    system = platform.system()
+    if system == "Windows":
+        try:
+            # Check elevated administrator privileges
+            res = silent_run(["net", "session"], capture_output=True)
+            posture["is_admin"] = bool(res.returncode == 0)
+        except Exception:
+            pass
+
+        try:
+            # Check Windows Firewall profile state
+            fw_out = silent_check_output(["netsh", "advfirewall", "show", "allprofiles", "state"], stderr=subprocess.DEVNULL, universal_newlines=True)
+            posture["firewall"] = "ACTIVE" if "ON" in fw_out else "DISABLED"
+        except Exception:
+            posture["firewall"] = "UNAVAILABLE"
+
+        try:
+            # Check Windows Defender service state
+            sc_out = silent_check_output(["sc", "query", "WinDefend"], stderr=subprocess.DEVNULL, universal_newlines=True)
+            if "RUNNING" in sc_out:
+                posture["antivirus"] = "RUNNING (Windows Defender)"
+            else:
+                posture["antivirus"] = "STOPPED / THIRD-PARTY"
+        except Exception:
+            posture["antivirus"] = "UNAVAILABLE"
+
+    elif system == "Linux":
+        try:
+            posture["is_admin"] = (os.geteuid() == 0)
+        except Exception:
+            pass
+        try:
+            posture["firewall"] = "iptables native"
+        except Exception:
+            pass
+
+    return posture
+
 def get_security_audit_events():
     """
     Extracts recent authentication and process execution audit events
-    using native OS commands with XML structured parsing and state tracking.
+    using native OS commands with XML structured parsing.
+    Returns (events, pending_state) for transactional At-Least-Once delivery.
     """
     events = []
     system = platform.system()
     state = load_agent_state()
     last_records = state.get("last_records", {})
+    pending_records = dict(last_records)
+    pending_state = {"last_records": pending_records}
 
     if system == "Windows":
         channels = [
@@ -328,12 +399,9 @@ def get_security_audit_events():
                         continue
 
                 events.extend(batch_events)
-                last_records[chan_name] = max_rec_in_batch
+                pending_records[chan_name] = max_rec_in_batch
             except Exception:
                 continue
-
-        state["last_records"] = last_records
-        save_agent_state(state)
 
     elif system == "Linux":
         auth_file = "/var/log/auth.log" if os.path.exists("/var/log/auth.log") else ("/var/log/secure" if os.path.exists("/var/log/secure") else None)
@@ -350,8 +418,7 @@ def get_security_audit_events():
                         f.seek(last_offset)
                     
                     new_lines = f.readlines()
-                    state["linux_offset"] = f.tell()
-                    save_agent_state(state)
+                    pending_state["linux_offset"] = f.tell()
 
                 for line in new_lines:
                     if "Failed password" in line:
@@ -378,53 +445,111 @@ def get_security_audit_events():
             except Exception:
                 pass
 
-    return events[:25]
+    return events[:25], pending_state
 
-def execute_remediation(action_payload):
+def execute_remediation(action_payload, server_url=None):
     action = action_payload.get("action")
     target = action_payload.get("target")
+    system = platform.system()
     
     if action == "kill_process" and target:
-        if platform.system() == "Windows":
+        if system == "Windows":
             silent_run(["taskkill", "/F", "/PID", str(target)], capture_output=True)
         else:
             silent_run(["kill", "-9", str(target)], capture_output=True)
-        log_msg(f"[!] Process {target} terminated by MiniSOC command.")
+        log_msg(f"[!] Active Defense: Process {target} terminated by MiniSOC EDR command.")
         return f"Process {target} killed"
+
+    elif action == "block_remote_ip" and target:
+        rule_name = f"MiniSOC_EDR_Drop_{target.replace(':', '_')}"
+        if system == "Windows":
+            silent_run([
+                "netsh", "advfirewall", "firewall", "add", "rule",
+                f"name={rule_name}", "dir=out", "action=block", f"remoteip={target}"
+            ], capture_output=True)
+            silent_run([
+                "netsh", "advfirewall", "firewall", "add", "rule",
+                f"name={rule_name}_in", "dir=in", "action=block", f"remoteip={target}"
+            ], capture_output=True)
+        elif system == "Linux":
+            silent_run(["iptables", "-A", "OUTPUT", "-d", target, "-j", "DROP"], capture_output=True)
+            silent_run(["iptables", "-A", "INPUT", "-s", target, "-j", "DROP"], capture_output=True)
+        log_msg(f"[!] Active Defense: Remote IP {target} dropped on local firewall by MiniSOC EDR.")
+        return f"IP {target} blocked locally"
+
+    elif action == "unblock_remote_ip" and target:
+        rule_name = f"MiniSOC_EDR_Drop_{target.replace(':', '_')}"
+        if system == "Windows":
+            silent_run(["netsh", "advfirewall", "firewall", "delete", "rule", f"name={rule_name}"], capture_output=True)
+            silent_run(["netsh", "advfirewall", "firewall", "delete", "rule", f"name={rule_name}_in"], capture_output=True)
+        elif system == "Linux":
+            silent_run(["iptables", "-D", "OUTPUT", "-d", target, "-j", "DROP"], capture_output=True)
+            silent_run(["iptables", "-D", "INPUT", "-s", target, "-j", "DROP"], capture_output=True)
+        log_msg(f"[+] Active Defense: Local firewall drop removed for IP {target}.")
+        return f"IP {target} unblocked locally"
         
     elif action == "isolate_host":
-        if platform.system() == "Windows":
+        soc_ip = None
+        if server_url:
+            try:
+                soc_host = server_url.split("://")[1].split("/")[0].split(":")[0]
+                soc_ip = socket.gethostbyname(soc_host)
+            except Exception:
+                soc_ip = None
+
+        if system == "Windows":
+            # 1. Allow SOC management server IP so agent connectivity survives
+            if soc_ip and soc_ip != "127.0.0.1":
+                silent_run([
+                    "netsh", "advfirewall", "firewall", "add", "rule",
+                    "name=MiniSOC_EDR_Exemption", "dir=out", "action=allow", f"remoteip={soc_ip}"
+                ], capture_output=True)
+            # Allow loopback
+            silent_run([
+                "netsh", "advfirewall", "firewall", "add", "rule",
+                "name=MiniSOC_Loopback_Exemption", "dir=out", "action=allow", "remoteip=127.0.0.1"
+            ], capture_output=True)
+            # 2. Block all other outbound traffic
             silent_run([
                 "netsh", "advfirewall", "firewall", "add", "rule",
                 "name=MiniSOC_Endpoint_Quarantine", "dir=out", "action=block"
             ], capture_output=True)
-        elif platform.system() == "Linux":
+        elif system == "Linux":
+            if soc_ip and soc_ip != "127.0.0.1":
+                silent_run(["iptables", "-A", "OUTPUT", "-d", soc_ip, "-j", "ACCEPT"], capture_output=True)
+            silent_run(["iptables", "-A", "OUTPUT", "-o", "lo", "-j", "ACCEPT"], capture_output=True)
             silent_run(["iptables", "-A", "OUTPUT", "-j", "DROP"], capture_output=True)
-        log_msg("[!] >>> COMMAND RECEIVED: HOST ISOLATED FROM NETWORK <<<")
-        log_msg("[!] Outbound traffic blocked by MiniSOC EDR quarantine rule.")
-        return "Host isolated from network"
+
+        log_msg("\n" + "!" * 65)
+        log_msg("[!] >>> COMMAND RECEIVED: HOST QUARANTINED FROM NETWORK <<<")
+        log_msg("[!] Lateral movement & outbound internet traffic blocked (SOC link preserved).")
+        log_msg("!" * 65 + "\n")
+        return "Host quarantined"
         
     elif action == "unisolate_host":
-        if platform.system() == "Windows":
-            silent_run([
-                "netsh", "advfirewall", "firewall", "delete", "rule",
-                "name=MiniSOC_Endpoint_Quarantine"
-            ], capture_output=True)
-        elif platform.system() == "Linux":
+        if system == "Windows":
+            silent_run(["netsh", "advfirewall", "firewall", "delete", "rule", "name=MiniSOC_Endpoint_Quarantine"], capture_output=True)
+            silent_run(["netsh", "advfirewall", "firewall", "delete", "rule", "name=MiniSOC_EDR_Exemption"], capture_output=True)
+            silent_run(["netsh", "advfirewall", "firewall", "delete", "rule", "name=MiniSOC_Loopback_Exemption"], capture_output=True)
+        elif system == "Linux":
             silent_run(["iptables", "-D", "OUTPUT", "-j", "DROP"], capture_output=True)
+        log_msg("\n" + "+" * 65)
         log_msg("[+] >>> COMMAND RECEIVED: HOST QUARANTINE REMOVED <<<")
-        log_msg("[+] Outbound network connectivity fully restored.")
+        log_msg("[+] Full outbound network access restored.")
+        log_msg("+" * 65 + "\n")
         return "Host quarantine removed"
         
     return "No action taken"
 
 def send_telemetry(server_url):
     server_url = normalize_server_url(server_url)
+    audit_events, pending_state = get_security_audit_events()
     payload = {
         "system": get_system_info(),
+        "security_posture": get_security_posture(),
         "connections": get_active_connections(),
         "processes": get_top_processes(),
-        "events": get_security_audit_events()
+        "events": audit_events
     }
     data_bytes = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(
@@ -440,9 +565,11 @@ def send_telemetry(server_url):
     try:
         with urllib.request.urlopen(req, timeout=10) as response:
             if response.status == 200:
+                # Commit watermark state ONLY after confirmed delivery
+                commit_agent_state(pending_state)
                 res_data = json.loads(response.read().decode("utf-8"))
                 if "command" in res_data:
-                    execute_remediation(res_data["command"])
+                    execute_remediation(res_data["command"], server_url=server_url)
                 return True, "Telemetry delivered"
     except Exception as e:
         return False, str(e)
