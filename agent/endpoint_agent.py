@@ -99,6 +99,8 @@ def get_friendly_os() -> str:
             return f"Windows {platform.release()}"
         except Exception:
             return f"Windows {platform.release()}"
+    elif "ANDROID_ROOT" in os.environ or "ANDROID_DATA" in os.environ or os.path.exists("/system/build.prop"):
+        return f"Android (Linux {platform.release()})"
     return f"{platform.system()} {platform.release()}"
 
 def get_system_info():
@@ -119,18 +121,27 @@ def get_system_info():
 def get_active_connections():
     connections = []
     try:
-        cmd = ["netstat", "-ano"] if platform.system() == "Windows" else ["netstat", "-tulnp"]
-        output = silent_check_output(cmd, stderr=subprocess.DEVNULL, universal_newlines=True)
+        if platform.system() == "Windows":
+            cmd = ["netstat", "-ano"]
+        else:
+            cmd = ["netstat", "-tulnp"]
+        try:
+            output = silent_check_output(cmd, stderr=subprocess.DEVNULL, universal_newlines=True)
+        except Exception:
+            # Fallback for Android / minimal Linux without netstat-tools
+            cmd = ["ss", "-ant"]
+            output = silent_check_output(cmd, stderr=subprocess.DEVNULL, universal_newlines=True)
+
         for line in output.splitlines():
             line = line.strip()
-            if line.startswith("TCP") or line.startswith("UDP") or line.startswith("tcp") or line.startswith("udp"):
+            if line.startswith("TCP") or line.startswith("UDP") or line.startswith("tcp") or line.startswith("udp") or line.startswith("LISTEN") or line.startswith("ESTAB"):
                 parts = line.split()
                 if len(parts) >= 4:
                     connections.append({
                         "proto": parts[0],
-                        "local": parts[1],
-                        "remote": parts[2],
-                        "state": parts[3] if len(parts) > 4 else "UNKNOWN",
+                        "local": parts[1] if len(parts) > 3 else "0.0.0.0",
+                        "remote": parts[2] if len(parts) > 3 else "0.0.0.0",
+                        "state": parts[3] if len(parts) > 4 else parts[1],
                         "pid": parts[-1]
                     })
     except Exception as e:
@@ -154,18 +165,30 @@ def get_top_processes():
                             "mem_usage": cols[4]
                         })
         else:
-            cmd = ["ps", "-eo", "pid,user,%cpu,%mem,comm", "--sort=-%mem"]
-            output = silent_check_output(cmd, stderr=subprocess.DEVNULL, universal_newlines=True)
-            for line in output.splitlines()[1:30]:
-                parts = line.split()
-                if len(parts) >= 5:
-                    procs.append({
-                        "pid": parts[0],
-                        "user": parts[1],
-                        "cpu": parts[2],
-                        "mem": parts[3],
-                        "name": parts[4]
-                    })
+            try:
+                cmd = ["ps", "-eo", "pid,user,%cpu,%mem,comm", "--sort=-%mem"]
+                output = silent_check_output(cmd, stderr=subprocess.DEVNULL, universal_newlines=True)
+                for line in output.splitlines()[1:30]:
+                    parts = line.split()
+                    if len(parts) >= 5:
+                        procs.append({
+                            "pid": parts[0],
+                            "user": parts[1],
+                            "cpu": parts[2],
+                            "mem": parts[3],
+                            "name": parts[4]
+                        })
+            except Exception:
+                # Android / BusyBox fallback
+                cmd = ["ps"]
+                output = silent_check_output(cmd, stderr=subprocess.DEVNULL, universal_newlines=True)
+                for line in output.splitlines()[1:30]:
+                    parts = line.split()
+                    if len(parts) >= 4:
+                        procs.append({
+                            "pid": parts[0] if parts[0].isdigit() else (parts[1] if len(parts)>1 and parts[1].isdigit() else "-"),
+                            "name": parts[-1]
+                        })
     except Exception as e:
         procs.append({"error": str(e)})
     return procs[:30]

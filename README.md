@@ -171,7 +171,22 @@ sudo python3 agent/endpoint_agent.py --install http://YOUR_SERVER_IP:5000/api/v1
 systemctl status minisoc-agent.service
 ```
 
-### Option C: Cloud & Container Deployment (Docker)
+#### Android Mobile Devices (Termux):
+Monitor Android smartphones and tablets directly from MiniSOC:
+```bash
+# Inside Termux on Android:
+pkg update && pkg install python git -y
+python endpoint_agent.py http://YOUR_SOC_IP:5000/api/v1/telemetry
+```
+*Monitors Android network sockets (`ss`/`netstat`), active app processes, device architecture, and IP telemetry.*
+
+### Option C: Mobile SOC Console Access (iOS & Android)
+The MiniSOC web dashboard is built on a responsive Bootstrap 5 grid:
+- Open `http://<SOC_LAN_IP>:5000` (e.g. `http://10.0.88.38:5000`) on your phone's browser (Safari / Chrome) while on the same Wi-Fi.
+- For remote access anywhere, connect via your public tunnel / cloud domain (e.g. `https://<domain>.ngrok-free.dev`).
+- **Full On-Call Triage**: Review live incident feeds, ask Nova AI questions, execute 1-click IP blocks, and isolate compromised hosts straight from your phone.
+
+### Option D: Cloud & Container Deployment (Docker)
 
 ```bash
 # 1-Click Multi-Container Launch
