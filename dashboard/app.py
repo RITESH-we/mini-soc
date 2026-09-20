@@ -277,6 +277,58 @@ def update_status(aid):
     conn.close()
     return jsonify({'ok': True})
 
+# ── Alert Full Forensic Details & Surrounding Events (Wazuh-style) ──
+@app.route('/api/alert/<int:aid>/details')
+def alert_full_details(aid):
+    conn = get_conn()
+    alert = conn.execute("SELECT * FROM alerts WHERE id=?", (aid,)).fetchone()
+    conn.close()
+    if not alert:
+        return jsonify({"error": "Alert not found"}), 404
+    
+    d = dict(alert)
+    raw = {}
+    if d.get("raw_event"):
+        try:
+            raw = json.loads(d["raw_event"])
+        except Exception:
+            raw = {"raw_text": d["raw_event"]}
+    d["parsed_raw"] = raw
+    return jsonify(d)
+
+@app.route('/api/alert/<int:aid>/surrounding')
+def alert_surrounding_events(aid):
+    conn = get_conn()
+    alert = conn.execute("SELECT * FROM alerts WHERE id=?", (aid,)).fetchone()
+    if not alert:
+        conn.close()
+        return jsonify({"error": "Alert not found"}), 404
+    
+    device = alert["device_name"]
+    ts = alert["timestamp"]
+    
+    # Fetch temporal window: 8 events before and 8 events after on the same device
+    before_rows = conn.execute("""
+        SELECT * FROM telemetry_logs 
+        WHERE hostname=? AND timestamp <= ?
+        ORDER BY timestamp DESC LIMIT 8
+    """, (device, ts)).fetchall()
+    
+    after_rows = conn.execute("""
+        SELECT * FROM telemetry_logs 
+        WHERE hostname=? AND timestamp > ?
+        ORDER BY timestamp ASC LIMIT 8
+    """, (device, ts)).fetchall()
+    conn.close()
+    
+    events = list(reversed([dict(r) for r in before_rows])) + [dict(r) for r in after_rows]
+    return jsonify({
+        "alert_id": aid,
+        "device": device,
+        "alert_timestamp": ts,
+        "events": events
+    })
+
 # ── Incidents ─────────────────────────────────────────────────
 @app.route('/incidents')
 def incidents():

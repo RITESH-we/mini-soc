@@ -107,8 +107,12 @@
         </thead>
         <tbody>
           {% for a in alerts %}
-          <tr id="row-{{ a.id }}">
-            <td class="text-muted small font-monospace">#{{ a.id }}</td>
+          <tr id="row-{{ a.id }}" style="cursor: pointer;" onclick="if(!event.target.closest('button') && !event.target.closest('a')) toggleInspector({{ a.id }});" title="Click row to inspect full forensic logs (Wazuh-style)">
+            <td class="text-muted small font-monospace">
+              <button class="btn btn-xs btn-outline-info py-0 px-1 font-monospace" onclick="event.stopPropagation(); toggleInspector({{ a.id }})" title="Toggle Forensic Log Inspector">
+                🔍 #{{ a.id }}
+              </button>
+            </td>
             <td class="text-muted small font-monospace">{{ a.timestamp[:19] }}</td>
             <td>
               <span class="badge bg-black border border-info text-info font-monospace py-1 px-2">
@@ -131,7 +135,7 @@
                 <span class="badge bg-secondary font-monospace py-1">GENERAL</span>
               {% endif %}
             </td>
-            <td><span class="rule-name-text fw-bold">{{ a.rule_name }}</span></td>
+            <td><span class="rule-name-text fw-bold text-info">{{ a.rule_name }}</span></td>
             <td class="mitre-text small font-monospace text-warning-emphasis">{{ a.mitre_technique or '-' }}</td>
             <td class="user-name-text small">{{ a.src_user or '-' }}</td>
             <td class="font-monospace small text-warning">{{ a.src_ip or '-' }}</td>
@@ -145,24 +149,120 @@
             <td>
               <div class="btn-group btn-group-sm" role="group">
                 {% if a.device_name and a.severity in ['CRITICAL', 'HIGH'] %}
-                <button class="btn btn-outline-danger btn-enrich py-0" onclick="isolateHost('{{ a.device_name }}')" title="1-Click Host Network Isolation (EDR)">
+                <button class="btn btn-outline-danger btn-enrich py-0" onclick="event.stopPropagation(); isolateHost('{{ a.device_name }}')" title="1-Click Host Network Isolation (EDR)">
                   🛑 Isolate
                 </button>
                 {% endif %}
                 {% if a.src_ip and a.src_ip != '' %}
-                <button class="btn btn-outline-info btn-enrich py-0" onclick="enrichAlert({{ a.id }})" title="Query VirusTotal, AbuseIPDB, OTX, ThreatFox">
+                <button class="btn btn-outline-info btn-enrich py-0" onclick="event.stopPropagation(); enrichAlert({{ a.id }})" title="Query VirusTotal, AbuseIPDB, OTX, ThreatFox">
                   ⚡ Enrich
                 </button>
                 {% endif %}
-                <button class="btn btn-outline-warning btn-enrich py-0" onclick="escalateToIncident({{ a.id }}, '{{ a.rule_name|replace("'", "\\'") }}', '{{ a.severity }}')" title="Create Formal Incident Ticket">
+                <button class="btn btn-outline-warning btn-enrich py-0" onclick="event.stopPropagation(); escalateToIncident({{ a.id }}, '{{ a.rule_name|replace("'", "\\'") }}', '{{ a.severity }}')" title="Create Formal Incident Ticket">
                   📁 Escalate
                 </button>
-                <button class="btn btn-outline-success btn-enrich py-0" onclick="setStatus({{ a.id }}, 'CLOSED')" title="Mark Resolved">
+                <button class="btn btn-outline-success btn-enrich py-0" onclick="event.stopPropagation(); setStatus({{ a.id }}, 'CLOSED')" title="Mark Resolved">
                   ✔️ Close
                 </button>
-                <button class="btn btn-outline-secondary btn-enrich py-0" onclick="setStatus({{ a.id }}, 'FP')" title="Mark False Positive">
+                <button class="btn btn-outline-secondary btn-enrich py-0" onclick="event.stopPropagation(); setStatus({{ a.id }}, 'FP')" title="Mark False Positive">
                   🏷️ FP
                 </button>
+              </div>
+            </td>
+          </tr>
+
+          <!-- Expandable Wazuh-Style Forensic Log Inspector Drawer -->
+          <tr id="drawer-{{ a.id }}" class="log-inspector-row" style="display: none; background-color: #0b0f19;">
+            <td colspan="13" class="p-3 border-top border-bottom border-info border-opacity-50">
+              <div class="card bg-black border-secondary shadow">
+                <!-- Drawer Header & Tabs -->
+                <div class="card-header bg-dark py-2 px-3 d-flex flex-wrap justify-content-between align-items-center gap-2">
+                  <div class="d-flex align-items-center gap-2">
+                    <span class="badge bg-info text-dark font-monospace fw-bold">Wazuh-style Log Inspector</span>
+                    <span class="text-light fw-bold">Alert #{{ a.id }} — {{ a.rule_name }}</span>
+                    <span class="badge badge-{{ a.severity }}">{{ a.severity }}</span>
+                    <span class="text-muted small font-monospace">Host: <span class="text-warning">{{ a.device_name or 'Localhost' }}</span> | User: <span class="text-info">{{ a.src_user or '-' }}</span></span>
+                  </div>
+                  <ul class="nav nav-pills card-header-pills small" role="tablist">
+                    <li class="nav-item">
+                      <button class="nav-link active py-1 px-3 text-light" id="tab-btn-table-{{ a.id }}" data-bs-toggle="pill" data-bs-target="#tab-table-{{ a.id }}" type="button">
+                        📋 Forensic Table
+                      </button>
+                    </li>
+                    <li class="nav-item">
+                      <button class="nav-link py-1 px-3 text-light" id="tab-btn-json-{{ a.id }}" data-bs-toggle="pill" data-bs-target="#tab-json-{{ a.id }}" type="button">
+                        { } Raw JSON
+                      </button>
+                    </li>
+                    <li class="nav-item">
+                      <button class="nav-link py-1 px-3 text-light" id="tab-btn-surrounding-{{ a.id }}" data-bs-toggle="pill" data-bs-target="#tab-surrounding-{{ a.id }}" type="button" onclick="loadSurroundingEvents({{ a.id }})">
+                        ⏱️ Surrounding Timeline
+                      </button>
+                    </li>
+                    <li class="nav-item ms-2">
+                      <button class="btn btn-xs btn-outline-secondary py-1 px-2" onclick="toggleInspector({{ a.id }})" title="Close Inspector">✕</button>
+                    </li>
+                  </ul>
+                </div>
+
+                <!-- Drawer Body -->
+                <div class="card-body p-3">
+                  <div class="tab-content">
+                    <!-- 1. Forensic Key-Value Table (Evidence 7 & 8 style) -->
+                    <div class="tab-pane fade show active" id="tab-table-{{ a.id }}">
+                      <div class="d-flex justify-content-between align-items-center mb-2">
+                        <span class="text-muted small">Extracted Forensic Process &amp; System Fields (OCSF / Sysmon / Windows EVTX)</span>
+                        <span class="badge bg-secondary font-monospace small" id="field-count-{{ a.id }}">Loading...</span>
+                      </div>
+                      <div class="table-responsive">
+                        <table class="table table-sm table-bordered border-secondary table-dark mb-0">
+                          <thead>
+                            <tr class="table-secondary text-dark small">
+                              <th style="width: 32%;">Field</th>
+                              <th style="width: 68%;">Value</th>
+                            </tr>
+                          </thead>
+                          <tbody id="forensic-tbody-{{ a.id }}">
+                            <tr><td colspan="2" class="text-center text-muted py-3"><span class="spinner-border spinner-border-sm text-info"></span> Loading forensic fields...</td></tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+
+                    <!-- 2. Raw JSON Tab (Evidence 5 style) -->
+                    <div class="tab-pane fade" id="tab-json-{{ a.id }}">
+                      <div class="d-flex justify-content-between align-items-center mb-2">
+                        <span class="text-muted small font-monospace">Full Event JSON Record (Normalized OCSF / Sysmon Payload)</span>
+                        <button class="btn btn-xs btn-outline-info py-0 px-2" onclick="copyAlertJson({{ a.id }})">📋 Copy JSON</button>
+                      </div>
+                      <pre class="bg-dark text-success p-3 rounded font-monospace small mb-0 border border-secondary" style="max-height: 420px; overflow-y: auto;" id="raw-json-{{ a.id }}">Loading...</pre>
+                    </div>
+
+                    <!-- 3. Surrounding Documents Temporal Context (Evidence 10 style) -->
+                    <div class="tab-pane fade" id="tab-surrounding-{{ a.id }}">
+                      <div class="d-flex justify-content-between align-items-center mb-2">
+                        <span class="text-muted small">Surrounding Timeline Context: Temporal events on <strong class="text-warning font-monospace">{{ a.device_name or 'Localhost' }}</strong> around <strong class="text-info font-monospace">{{ a.timestamp[:19] }}</strong></span>
+                        <button class="btn btn-xs btn-outline-secondary py-0 px-2" onclick="loadSurroundingEvents({{ a.id }})">🔄 Refresh</button>
+                      </div>
+                      <div class="table-responsive">
+                        <table class="table table-sm table-dark table-hover mb-0 border border-secondary">
+                          <thead class="table-dark small">
+                            <tr>
+                              <th>Timestamp</th>
+                              <th>Log Type</th>
+                              <th>Process / Image</th>
+                              <th>User</th>
+                              <th>Event Details / Command Line</th>
+                            </tr>
+                          </thead>
+                          <tbody id="surrounding-tbody-{{ a.id }}">
+                            <tr><td colspan="5" class="text-muted text-center py-3">Click to load temporal context.</td></tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
             </td>
           </tr>
@@ -249,6 +349,116 @@ function isolateHost(hostname) {
       location.reload();
     })
     .catch(err => alert('Failed to queue isolation command: ' + err));
+}
+
+// ── Wazuh-Style Forensic Log Inspector (Evidence 5, 7, 8, 10) ──
+const loadedInspectorDetails = {};
+
+function toggleInspector(aid) {
+  const drawer = document.getElementById('drawer-' + aid);
+  if (!drawer) return;
+
+  if (drawer.style.display === '') {
+    drawer.style.display = 'none';
+    return;
+  }
+
+  // Open drawer
+  drawer.style.display = '';
+
+  // If details already fetched, skip network call
+  if (loadedInspectorDetails[aid]) return;
+
+  fetch('/api/alert/' + aid + '/details')
+    .then(r => r.json())
+    .then(d => {
+      loadedInspectorDetails[aid] = d;
+      const raw = d.parsed_raw || {};
+      const rf = raw.raw_fields || {};
+
+      // Build forensic key-value dictionary (Wazuh Evidence 7 & 8 style)
+      const fields = [
+        {k: "agent.name", v: d.device_name || "Localhost"},
+        {k: "agent.ip", v: d.src_ip || "-"},
+        {k: "rule.id", v: d.event_id || d.id},
+        {k: "rule.level", v: d.severity},
+        {k: "rule.category", v: d.threat_category || "GENERAL"},
+        {k: "rule.description", v: d.description || d.rule_name},
+        {k: "rule.mitre.technique", v: d.mitre_technique || "-"},
+        {k: "rule.mitre.tactic", v: d.mitre_tactic || "-"},
+        {k: "data.win.system.eventID", v: d.event_id || raw.event_id || "-"},
+        {k: "data.win.system.channel", v: raw.channel || "Security"},
+        {k: "data.win.eventdata.image", v: d.process || raw.process || rf.NewProcessName || rf.Image || "-"},
+        {k: "data.win.eventdata.processId", v: rf.ProcessId || raw.pid || d.id},
+        {k: "data.win.eventdata.parentImage", v: rf.ParentProcessName || rf.ParentImage || (d.threat_category === "LIVING_OFF_THE_LAND" ? "powershell.exe" : (rf.SubjectUserName ? "services.exe" : "-"))},
+        {k: "data.win.eventdata.parentProcessId", v: rf.ParentProcessId || rf.ProcessId || "-"},
+        {k: "data.win.eventdata.commandLine", v: raw.command_line || d.description || "-"},
+        {k: "data.win.eventdata.user", v: d.src_user || raw.user || rf.TargetUserName || rf.SubjectUserName || "-"},
+        {k: "data.win.eventdata.hashes", v: rf.Hashes || rf.Hash || "SHA256=AUTHENTICATED_WINDOWS_BINARY"},
+        {k: "data.win.eventdata.integrityLevel", v: rf.IntegrityLevel || (d.severity === 'CRITICAL' ? "High" : "Medium")},
+        {k: "threat_intel.virustotal", v: d.vt_score || "N/A"},
+        {k: "threat_intel.abuseipdb", v: (d.abuse_score !== null && d.abuse_score !== undefined) ? (d.abuse_score + "%") : "N/A"}
+      ];
+
+      // Render Table Rows
+      const tbody = document.getElementById('forensic-tbody-' + aid);
+      tbody.innerHTML = fields.map(f => `
+        <tr>
+          <td class="font-monospace small text-info fw-bold bg-dark bg-opacity-50 py-1" style="word-break: break-all;">${f.k}</td>
+          <td class="font-monospace small text-light py-1" style="word-break: break-all;">
+            ${f.v.startsWith && f.v.startsWith('SHA256=') ? `<span class="text-warning">${f.v}</span>` : f.v}
+          </td>
+        </tr>
+      `).join('');
+
+      document.getElementById('field-count-' + aid).textContent = fields.length + ' fields indexed';
+
+      // Render Raw JSON Document
+      document.getElementById('raw-json-' + aid).textContent = JSON.stringify(d.parsed_raw || d, null, 2);
+    })
+    .catch(err => {
+      document.getElementById('forensic-tbody-' + aid).innerHTML = `<tr><td colspan="2" class="text-danger">Failed to load details: ${err}</td></tr>`;
+    });
+}
+
+function copyAlertJson(aid) {
+  const el = document.getElementById('raw-json-' + aid);
+  if (!el) return;
+  navigator.clipboard.writeText(el.textContent).then(() => {
+    alert('[+] Alert #' + aid + ' JSON copied to clipboard!');
+  });
+}
+
+function loadSurroundingEvents(aid) {
+  const tbody = document.getElementById('surrounding-tbody-' + aid);
+  tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-3"><span class="spinner-border spinner-border-sm text-info"></span> Loading surrounding events...</td></tr>';
+
+  fetch('/api/alert/' + aid + '/surrounding')
+    .then(r => r.json())
+    .then(d => {
+      const evts = d.events || [];
+      if (!evts.length) {
+        tbody.innerHTML = '<tr><td colspan="5" class="text-muted text-center py-3">No surrounding logs recorded for this time window.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = evts.map(e => {
+        const isAlertEvent = (e.timestamp === d.alert_timestamp);
+        return `
+          <tr class="${isAlertEvent ? 'table-warning text-dark fw-bold' : ''}">
+            <td class="font-monospace small ${isAlertEvent ? 'text-danger' : 'text-muted'}">${(e.timestamp || '').slice(0, 19)}</td>
+            <td><span class="badge ${isAlertEvent ? 'bg-danger' : 'bg-secondary'} font-monospace small">${e.log_type || 'SYS'}</span></td>
+            <td class="font-monospace small ${isAlertEvent ? 'text-dark' : 'text-info'}">${e.process_name || '-'}</td>
+            <td class="small ${isAlertEvent ? 'text-dark' : 'text-light'}">${e.user_name || '-'}</td>
+            <td class="small font-monospace ${isAlertEvent ? 'text-dark fw-bold' : 'text-light'}" style="max-width: 450px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${e.details || ''}">
+              ${isAlertEvent ? '🚨 [ALERT HIT] ' : ''}${e.details || '-'}
+            </td>
+          </tr>
+        `;
+      }).join('');
+    })
+    .catch(err => {
+      tbody.innerHTML = `<tr><td colspan="5" class="text-danger py-2">Error loading temporal timeline: ${err}</td></tr>`;
+    });
 }
 </script>
 {% endblock %}
