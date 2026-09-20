@@ -121,7 +121,38 @@ It was engineered by identifying the foundational architectural bottlenecks, pro
 - **Dynamic UEBA Risk Escalation**: Automatically aggregates behavioral anomalies, escalating user risk scores to Critical (`>= 75 pts`) and surfacing them on the Top Risky Entities matrix.
 
 ### 8. 🎯 Interactive Alert Triage Console & Wazuh-Style Forensic Log Inspector
-- **Expandable In-Place Log Inspector (Wazuh Discover / OpenSearch Model)**: Clicking any alert row expands a rich, multi-tabbed forensic investigation drawer:
+MiniSOC provides an enterprise-grade alert triage console modeled after **Wazuh Discover**, **OpenSearch Dashboards**, and real-world SOC benchmark investigations (such as **OpenSOC-Lab Case 001**), allowing L1/L2 security analysts to perform deep forensic examinations directly from the alert feed without switching consoles:
+
+```
++---------------------------------------------------------------------------------------------------------+
+| [🔍 #16] 2026-09-20 00:42:52 | LENOVO | HIGH | 📜 LOTL / SCRIPT | Suspicious PowerShell Script Block    |
++---------------------------------------------------------------------------------------------------------+
+| [WAZUH-STYLE LOG INSPECTOR]  Alert #16 — Suspicious PowerShell Script Block  [HIGH]  Host: LENOVO        |
+| Tabs: [ 📋 Forensic Table ]  [ { } Raw JSON ]  [ ⏱️ Surrounding Timeline ]                           [✕] |
++---------------------------------------------------------------------------------------------------------+
+|                                                                                                         |
+|  [TAB 1: 📋 FORENSIC TABLE VIEW] (Process Lineage & Attribute Breakdown)                                 |
+|  • agent.name                     LENOVO                                                                |
+|  • data.win.system.eventID        4104                                                                  |
+|  • data.win.eventdata.image       C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe             |
+|  • data.win.eventdata.processId   9728                                                                  |
+|  • data.win.eventdata.parentImage services.exe                                                          |
+|  • data.win.eventdata.parentPID   9928                                                                  |
+|  • data.win.eventdata.commandLine Set-ExecutionPolicy -ExecutionPolicy ByPass -Scope CurrentUser...     |
+|  • data.win.eventdata.hashes      SHA256=AUTHENTICATED_WINDOWS_BINARY                                   |
+|  • data.win.eventdata.user        DESKTOP\rites                                                         |
+|  • rule.mitre.technique           T1059.001 - PowerShell                                                |
+|                                                                                                         |
+|  [TAB 2: { } RAW JSON VIEW]                                                                             |
+|  • Formatted, syntax-highlighted OCSF/Sysmon JSON payload with a 1-click "📋 Copy JSON" button.         |
+|                                                                                                         |
+|  [TAB 3: ⏱️ SURROUNDING TIMELINE CONTEXT] ("View Surrounding Documents" Model)                           |
+|  • Reconstructs the temporal execution window: queries ±8 events immediately preceding and following    |
+|    the incident on the target host, highlighting the exact alert trigger (🚨 [ALERT HIT]).             |
++---------------------------------------------------------------------------------------------------------+
+```
+
+- **Expandable In-Place Log Inspector**: Clicking any alert row smoothly toggles the forensic inspection drawer:
   - **📋 Forensic Table Tab**: Two-column key-value attribute view mapping process lineage (`image`, `processId`, `parentImage`, `parentProcessId`, `commandLine`, `parentCommandLine`), security tokens (`user`, `integrityLevel`, `hashes`), and rule definitions (`rule.id`, `rule.level`, `rule.mitre`).
   - **{ } Raw JSON Tab**: Pretty-printed, syntax-highlighted OCSF/Sysmon event payload with 1-click clipboard copying for external reporting and SIEM forwarding.
   - **⏱️ Surrounding Timeline Tab**: Temporal context reconstruction (`/api/alert/<id>/surrounding`) displaying adjacent host telemetry ($\pm 8$ events) before and after the alert to trace root cause processes.
