@@ -1,11 +1,13 @@
-# 🛡️ MiniSOC v2.2 Enterprise — Cloud-Ready SIEM, XDR & UEBA Platform
+# 🛡️ MiniSOC v2.3 Enterprise — Cloud-Ready SIEM, XDR & UEBA Platform
 ### Synthesizing the Top 10 Enterprise SIEM Platforms into a Modern Cloud-Native Security Engine
 
 [![Python](https://img.shields.io/badge/Python-3.11+-blue.svg?logo=python&logoColor=white)](https://www.python.org/)
 [![Web UI](https://img.shields.io/badge/Web_UI-Flask-000000.svg?logo=flask&logoColor=white)](https://flask.palletsprojects.com/)
 [![Security](https://img.shields.io/badge/Security-MITRE_ATT%26CK_v14-red.svg)](https://attack.mitre.org/)
 [![Schema](https://img.shields.io/badge/Schema-OCSF%20%2F%20ECS-blueviolet.svg)](https://schema.ocsf.io)
+[![Top 5 Attacks](https://img.shields.io/badge/EDR-Top_5_Attack_Vectors-critical.svg)](#-top-5-most-critical-cyber-attack-use-cases--advanced-threat-suite)
 [![UEBA](https://img.shields.io/badge/UEBA-Behavioral_Risk_Engine-purple.svg)](#-behavioral-ueba-risk-engine-exabeam--securonix-inspiration)
+[![Tests](https://img.shields.io/badge/Tests-100%25_Passing-success.svg)](tests/test_top5_attacks.py)
 [![Cloud Ready](https://img.shields.io/badge/Deployment-Docker%20%7C%20Cloud-informational.svg)](Dockerfile)
 [![Threat Intel](https://img.shields.io/badge/Threat_Intel-VT_%7C_AbuseIPDB_%7C_ThreatFox_%7C_OTX-green.svg)](https://threatfox.abuse.ch/)
 [![Architecture](https://img.shields.io/badge/Architecture-Enterprise_Deep_Dive-orange.svg)](ARCHITECTURE.md)
@@ -111,6 +113,18 @@ It was engineered by identifying the foundational architectural bottlenecks, pro
 - Interactive AI co-pilot embedded in the dashboard.
 - **1-Click RCA**: Generates human-grade Root Cause Analysis narratives, blast radius estimates, and containment recommendations.
 - **NIST SP 800-61 Rev 2 Reports**: Generates formal incident PDF reports in 1 click.
+
+### 7. 🕵️ Insider Threat Detection & Behavioral Profiling
+- **Data Staging & Exfiltration Detection**: Flags suspicious bulk compression (`Compress-Archive`, `tar -czf`, `7z a`) targeting confidential repositories (`Documents`, `Desktop`, `.aws`, `.ssh`, `.git`) before scheduled employee offboarding.
+- **Privilege Tampering & Shadow Accounts**: Real-time auditing of rogue account creation (`Event 4720`) and high-privilege escalation (`Event 4732` member added to local `Administrators`).
+- **Anti-Forensics & Tampering**: Detects security event log clearing (`Event 1102` / `wevtutil cl`) and suspicious privilege enumeration (`whoami /priv` with `SeDebugPrivilege`).
+- **Dynamic UEBA Risk Escalation**: Automatically aggregates behavioral anomalies, escalating user risk scores to Critical (`>= 75 pts`) and surfacing them on the Top Risky Entities matrix.
+
+### 8. 🎯 Interactive Alert Triage Console with Attack Categorization
+- **Multi-Vector Quick-Filter Controls**: Instantly filter triage queues by specific attack vectors (`Ransomware`, `Credential Access`, `Living-off-the-Land`, `C2 & Exfiltration`, `Persistence`, `All Categories`).
+- **Visual Attack Badges**: Color-coded badges with MITRE ATT&CK technique tags directly on alert rows.
+- **Direct 1-Click Containment**: Execute host isolation (`🛑 Isolate`) or IP blocks straight from the alert triage row without switching screens.
+- **Exportable Evidence**: Full CSV alert exports with MITRE techniques, threat categories, and threat intelligence scores for compliance reporting.
 
 ---
 
@@ -257,14 +271,25 @@ docker-compose up --build -d
 docker-compose ps
 ```
 
+### Option E: Running the Attack Verification Test Suite
+
+Verify that all 5 critical attack use cases, correlation rules, and UEBA risk scoring matrices are functioning at 100%:
+
+```powershell
+python tests/test_top5_attacks.py
+```
+
+*Simulates Ransomware Shadow Copy destruction, Pass-the-Hash / LSASS dumping, Obfuscated PowerShell, C2 beaconing, and rogue persistence with anti-forensics log clearing, verifying zero-error acknowledgment and instant risk escalation.*
+
 ---
 
 ## 💼 Top 1% Resume Positioning
 
 ```markdown
-- Architected and implemented an enterprise-grade Cloud-Ready SIEM/XDR platform synthesizing capabilities from Splunk ES, Microsoft Sentinel, and Exabeam, incorporating OCSF-compliant event normalization and real-time MITRE ATT&CK v14 threat mapping.
-- Engineered a zero-dependency endpoint agent featuring native Windows Event XML parsing (wevtutil/EVTX) and high-watermark state tracking, reducing telemetry ingestion latency by 85% and eliminating duplicate alert generation.
-- Designed a behavioral User & Entity Behavior Analytics (UEBA) engine dynamically calculating host/user risk scores (0-100) based on authentication deviations, privilege escalations, and abnormal process execution.
+- Architected and implemented an enterprise-grade Cloud-Ready SIEM, XDR & UEBA platform synthesizing capabilities from Splunk ES, Microsoft Sentinel, and Exabeam, incorporating OCSF-compliant event normalization and real-time MITRE ATT&CK v14 threat mapping.
+- Implemented an advanced detection suite covering the Top 5 modern attack vectors (Ransomware VSS deletion T1490, Pass-the-Hash T1550, Living-off-the-Land PowerShell T1059, C2 beaconing T1071, and rogue persistence T1053) with automated SOAR isolation playbooks.
+- Engineered a zero-dependency endpoint agent featuring native Windows Event XML parsing (wevtutil/EVTX) and transactional At-Least-Once delivery watermarks, eliminating telemetry loss during network drops and preventing duplicate alert generation.
+- Designed a behavioral User & Entity Behavior Analytics (UEBA) engine dynamically calculating host/user risk scores (0-100) based on authentication anomalies, privilege tampering, and unauthorized tool execution.
 - Developed integrated SOAR response playbooks enabling 1-click endpoint network isolation and automated Host-based IPS (HIPS) firewall drops with RFC 1918 loopback fail-safes.
 - Containerized the platform using multi-stage Docker builds for cloud-native deployment across AWS ECS, GCP Cloud Run, and on-premises environments.
 ```
