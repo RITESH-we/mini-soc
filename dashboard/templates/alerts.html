@@ -2,78 +2,89 @@
 {% block title %}Alert Triage Console{% endblock %}
 {% block content %}
 
-<!-- Header & Omnisearch -->
+<!-- Page Header -->
 <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
   <div>
-    <h4 class="mb-0 text-info fw-bold">SOC Tier 1 Alert Triage Console</h4>
-    <span class="text-muted small">Multi-device correlation, 1-click threat intel enrichment &amp; incident escalation</span>
+    <h4 class="mb-0 text-info fw-bold d-flex align-items-center gap-2">
+      <span>🚨 SOC Tier 1 Alert Triage Console</span>
+    </h4>
+    <span class="text-muted small">Multi-device correlation, in-place forensic log analysis &amp; active SOAR containment</span>
   </div>
-  <div class="d-flex gap-2">
-    <input type="text" id="triageSearch" class="form-control form-control-sm bg-dark text-light border-secondary" placeholder="🔍 Search by Device, IP, User, Rule..." onkeyup="filterTriageTable()" style="width: 280px;">
-    <a href="/api/alerts/export{% if current_device %}?device={{ current_device }}{% endif %}" class="btn btn-sm btn-outline-success d-flex align-items-center gap-1" title="Download all alerts as CSV report">
+  <div class="d-flex align-items-center gap-2">
+    <a href="/api/alerts/export{% if current_device %}?device={{ current_device }}{% endif %}{% if category %}&category={{ category }}{% endif %}" 
+       class="btn btn-sm btn-outline-success d-flex align-items-center gap-1" title="Download filtered alerts as CSV">
       <span>📥</span>
       <span>Export CSV</span>
     </a>
   </div>
 </div>
 
-<!-- Quick Filter Controls: Attack Category + Device + Severity -->
+<!-- Unified SOC Filter Toolbar -->
 <div class="card mb-3 bg-dark border-secondary shadow-sm">
-  <div class="card-body py-2 px-3 d-flex flex-column gap-2">
-    <!-- Row 1: Attack Category Filters (Top 5 Attack Use Cases) -->
-    <div class="d-flex align-items-center gap-1 flex-wrap">
-      <span class="small text-muted me-1 fw-bold">🎯 Attack Category:</span>
-      <a href="/alerts?severity={{ severity }}{% if current_device %}&device={{ current_device }}{% endif %}&category=ALL"
-         class="btn btn-xs py-1 px-2 small {% if not category or category=='ALL' %}btn-light text-dark fw-bold{% else %}btn-outline-secondary text-light{% endif %}">
-        All Categories
-      </a>
-      <a href="/alerts?severity={{ severity }}{% if current_device %}&device={{ current_device }}{% endif %}&category=RANSOMWARE"
-         class="btn btn-xs py-1 px-2 small {% if category=='RANSOMWARE' %}btn-danger fw-bold{% else %}btn-outline-danger text-danger-emphasis{% endif %}">
-        ☣️ Ransomware (T1490)
-      </a>
-      <a href="/alerts?severity={{ severity }}{% if current_device %}&device={{ current_device }}{% endif %}&category=CREDENTIAL_ACCESS"
-         class="btn btn-xs py-1 px-2 small {% if category=='CREDENTIAL_ACCESS' %}btn-warning text-dark fw-bold{% else %}btn-outline-warning text-warning-emphasis{% endif %}">
-        🔑 Credential Access &amp; PtH (T1003)
-      </a>
-      <a href="/alerts?severity={{ severity }}{% if current_device %}&device={{ current_device }}{% endif %}&category=LIVING_OFF_THE_LAND"
-         class="btn btn-xs py-1 px-2 small {% if category=='LIVING_OFF_THE_LAND' %}btn-info text-dark fw-bold{% else %}btn-outline-info text-info-emphasis{% endif %}">
-        📜 Living-off-the-Land (T1059)
-      </a>
-      <a href="/alerts?severity={{ severity }}{% if current_device %}&device={{ current_device }}{% endif %}&category=EXFILTRATION"
-         class="btn btn-xs py-1 px-2 small {% if category=='EXFILTRATION' %}fw-bold text-light{% else %}btn-outline-secondary text-light{% endif %}"
-         style="{% if category=='EXFILTRATION' %}background-color: #6f42c1; border-color: #6f42c1;{% else %}border-color: #6f42c1; color: #d63384;{% endif %}">
-        📡 C2 &amp; Exfiltration (T1071/T1560)
-      </a>
-      <a href="/alerts?severity={{ severity }}{% if current_device %}&device={{ current_device }}{% endif %}&category=PERSISTENCE"
-         class="btn btn-xs py-1 px-2 small {% if category=='PERSISTENCE' %}btn-primary fw-bold{% else %}btn-outline-primary text-primary-emphasis{% endif %}">
-        🔄 Persistence &amp; Escalation (T1053)
-      </a>
-    </div>
-
-    <!-- Row 2: Device and Severity Filters -->
-    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 pt-1 border-top border-secondary">
-      <!-- Device Filters -->
-      <div class="d-flex align-items-center gap-1 flex-wrap">
-        <span class="small text-muted me-1 fw-bold">Device:</span>
-        <a href="/alerts?severity={{ severity }}&category={{ category or 'ALL' }}" class="btn btn-xs {% if not current_device %}btn-info text-dark fw-bold{% else %}btn-outline-secondary text-light{% endif %} py-0 px-2 small">
-          All Devices
-        </a>
-        {% for d in devices %}
-        <a href="/alerts?device={{ d }}&severity={{ severity }}&category={{ category or 'ALL' }}" class="btn btn-xs {% if current_device==d %}btn-info text-dark fw-bold{% else %}btn-outline-secondary text-light{% endif %} py-0 px-2 small font-monospace">
-          💻 {{ d }}
-        </a>
-        {% endfor %}
+  <div class="card-body py-2 px-3">
+    <div class="row g-2 align-items-center">
+      <!-- Search Input -->
+      <div class="col-lg-4 col-md-12">
+        <div class="input-group input-group-sm">
+          <span class="input-group-text bg-dark border-secondary text-muted">🔍</span>
+          <input type="text" id="triageSearch" class="form-control bg-dark text-light border-secondary" 
+                 placeholder="Search alerts, hosts, users, rules, IPs..." onkeyup="filterTriageTable()">
+        </div>
       </div>
 
-      <!-- Severity Filters -->
-      <div class="d-flex align-items-center gap-1 flex-wrap">
-        <span class="small text-muted me-1 fw-bold">Severity:</span>
-        {% for sev in ['ALL', 'CRITICAL', 'HIGH', 'MEDIUM', 'LOW'] %}
-        <a href="/alerts?severity={{ sev }}{% if current_device %}&device={{ current_device }}{% endif %}&category={{ category or 'ALL' }}"
-           class="btn btn-xs py-0 px-2 small {% if severity==sev %}btn-primary fw-bold{% else %}btn-outline-secondary text-light{% endif %}">
-          {{ sev }}
+      <!-- Attack Category Dropdown -->
+      <div class="col-lg-3 col-md-4 col-sm-6">
+        <div class="input-group input-group-sm">
+          <span class="input-group-text bg-dark border-secondary text-muted">🎯</span>
+          <select class="form-select form-select-sm bg-dark text-light border-secondary" id="categoryFilter" onchange="applyTriageFilters()">
+            <option value="ALL" {% if not category or category=='ALL' %}selected{% endif %}>All Attack Categories</option>
+            <option value="RANSOMWARE" {% if category=='RANSOMWARE' %}selected{% endif %}>☣️ Ransomware (T1490)</option>
+            <option value="CREDENTIAL_ACCESS" {% if category=='CREDENTIAL_ACCESS' %}selected{% endif %}>🔑 Credential Access (T1003)</option>
+            <option value="LIVING_OFF_THE_LAND" {% if category=='LIVING_OFF_THE_LAND' %}selected{% endif %}>📜 Living-off-the-Land (T1059)</option>
+            <option value="EXFILTRATION" {% if category=='EXFILTRATION' %}selected{% endif %}>📡 C2 &amp; Exfiltration (T1071)</option>
+            <option value="PERSISTENCE" {% if category=='PERSISTENCE' %}selected{% endif %}>🔄 Persistence (T1053)</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Severity Dropdown -->
+      <div class="col-lg-2 col-md-3 col-sm-6">
+        <div class="input-group input-group-sm">
+          <span class="input-group-text bg-dark border-secondary text-muted">⚡</span>
+          <select class="form-select form-select-sm bg-dark text-light border-secondary" id="severityFilter" onchange="applyTriageFilters()">
+            <option value="ALL" {% if not severity or severity=='ALL' %}selected{% endif %}>All Severities</option>
+            <option value="CRITICAL" {% if severity=='CRITICAL' %}selected{% endif %}>🚨 CRITICAL</option>
+            <option value="HIGH" {% if severity=='HIGH' %}selected{% endif %}>⚠️ HIGH</option>
+            <option value="MEDIUM" {% if severity=='MEDIUM' %}selected{% endif %}>🔷 MEDIUM</option>
+            <option value="LOW" {% if severity=='LOW' %}selected{% endif %}>🟢 LOW</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Device Dropdown -->
+      <div class="col-lg-2 col-md-3 col-sm-6">
+        <div class="input-group input-group-sm">
+          <span class="input-group-text bg-dark border-secondary text-muted">💻</span>
+          <select class="form-select form-select-sm bg-dark text-light border-secondary" id="deviceFilter" onchange="applyTriageFilters()">
+            <option value="" {% if not current_device %}selected{% endif %}>All Devices</option>
+            {% for d in devices %}
+            <option value="{{ d }}" {% if current_device==d %}selected{% endif %}>{{ d }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+
+      <!-- Clear / Reset Filter Button -->
+      <div class="col-lg-1 col-md-2 col-sm-6 d-flex justify-content-end">
+        {% if (category and category != 'ALL') or current_device or (severity and severity != 'ALL') %}
+        <a href="/alerts" class="btn btn-sm btn-outline-danger w-100 py-1" title="Reset all filters">
+          ✕ Reset
         </a>
-        {% endfor %}
+        {% else %}
+        <button class="btn btn-sm btn-outline-secondary w-100 py-1" disabled title="No active filters">
+          Filters
+        </button>
+        {% endif %}
       </div>
     </div>
   </div>
@@ -283,17 +294,29 @@
 
 {% block scripts %}
 <script>
+function applyTriageFilters() {
+  const cat = document.getElementById('categoryFilter').value;
+  const sev = document.getElementById('severityFilter').value;
+  const dev = document.getElementById('deviceFilter').value;
+  let url = '/alerts?category=' + encodeURIComponent(cat) + '&severity=' + encodeURIComponent(sev);
+  if (dev) url += '&device=' + encodeURIComponent(dev);
+  window.location.href = url;
+}
+
 function filterTriageTable() {
   const query = document.getElementById('triageSearch').value.toLowerCase();
-  const rows = document.querySelectorAll('#triageTable tbody tr');
+  const rows = document.querySelectorAll('#triageTable tbody tr:not(.log-inspector-row)');
   let matchCount = 0;
   rows.forEach(r => {
     const text = r.textContent.toLowerCase();
+    const idMatch = r.id && r.id.match(/^row-(\d+)$/);
+    const drawer = idMatch ? document.getElementById('drawer-' + idMatch[1]) : null;
     if(text.includes(query)) {
       r.style.display = '';
       matchCount++;
     } else {
       r.style.display = 'none';
+      if (drawer) drawer.style.display = 'none';
     }
   });
   document.getElementById('alertCount').textContent = matchCount;

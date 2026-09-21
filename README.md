@@ -156,7 +156,7 @@ MiniSOC provides an enterprise-grade alert triage console modeled after **Wazuh 
   - **📋 Forensic Table Tab**: Two-column key-value attribute view mapping process lineage (`image`, `processId`, `parentImage`, `parentProcessId`, `commandLine`, `parentCommandLine`), security tokens (`user`, `integrityLevel`, `hashes`), and rule definitions (`rule.id`, `rule.level`, `rule.mitre`).
   - **{ } Raw JSON Tab**: Pretty-printed, syntax-highlighted OCSF/Sysmon event payload with 1-click clipboard copying for external reporting and SIEM forwarding.
   - **⏱️ Surrounding Timeline Tab**: Temporal context reconstruction (`/api/alert/<id>/surrounding`) displaying adjacent host telemetry ($\pm 8$ events) before and after the alert to trace root cause processes.
-- **Multi-Vector Quick-Filter Controls**: Instantly filter triage queues by specific attack vectors (`Ransomware`, `Credential Access`, `Living-off-the-Land`, `C2 & Exfiltration`, `Persistence`, `All Categories`).
+- **Unified SOC Filter Toolbar**: Clean, single-row filter toolbar to instantly slice triage queues by attack vectors (`Ransomware`, `Credential Access`, `Living-off-the-Land`, `C2 & Exfiltration`, `Persistence`), severity levels (`CRITICAL`, `HIGH`, `MEDIUM`, `LOW`), and target devices with instant live search and 1-click reset.
 - **Visual Attack Badges**: Color-coded badges with MITRE ATT&CK technique tags directly on alert rows.
 - **Direct 1-Click Containment**: Execute host isolation (`🛑 Isolate`) or IP blocks straight from the alert triage row without switching screens.
 - **Exportable Evidence**: Full CSV alert exports with MITRE techniques, threat categories, and threat intelligence scores for compliance reporting.
