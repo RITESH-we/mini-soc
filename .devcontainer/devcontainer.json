@@ -1,0 +1,14 @@
+{
+  "name": "MiniSOC Cloud Environment",
+  "image": "mcr.microsoft.com/devcontainers/python:3.11",
+  "forwardPorts": [5000],
+  "portsAttributes": {
+    "5000": {
+      "label": "MiniSOC Console",
+      "onAutoForward": "openBrowser",
+      "visibility": "public"
+    }
+  },
+  "postCreateCommand": "pip install -r requirements.txt",
+  "postStartCommand": "nohup python dashboard/app.py > /tmp/minisoc.log 2>&1 &"
+}

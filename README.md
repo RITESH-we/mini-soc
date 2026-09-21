@@ -306,7 +306,16 @@ The MiniSOC web dashboard is built on a responsive Bootstrap 5 grid:
 - For remote access anywhere, connect via your public tunnel / cloud domain (e.g. `https://<domain>.ngrok-free.dev`).
 - **Full On-Call Triage**: Review live incident feeds, ask Nova AI questions, execute 1-click IP blocks, and isolate compromised hosts straight from your phone.
 
-### Option D: Cloud & Container Deployment (Docker)
+### Option D: 100% Free Cloud Launch via GitHub Codespaces (Zero Setup, $0 Cost)
+
+Run MiniSOC directly on GitHub's cloud infrastructure with zero local installation and zero cost (GitHub includes 60 hours/month free for all accounts with no credit card required):
+
+1. Navigate to **[https://github.com/RITESH-we/mini-soc](https://github.com/RITESH-we/mini-soc)**.
+2. Click **`<> Code`** &rarr; select the **`Codespaces`** tab &rarr; click **`Create codespace on main`**.
+3. GitHub automatically builds the container using `.devcontainer/devcontainer.json`, installs dependencies, and launches the SOC console on port `5000`.
+4. In the **Ports** tab, set Port 5000 visibility to **Public** to access your unique, permanent HTTPS link: `https://<codespace-id>-5000.app.github.dev`.
+
+### Option E: Container Deployment (Docker)
 
 ```bash
 # 1-Click Multi-Container Launch
@@ -316,7 +325,7 @@ docker-compose up --build -d
 docker-compose ps
 ```
 
-### Option E: Running the Attack Verification Test Suite
+### Option F: Running the Attack Verification Test Suite
 
 Verify that all 5 critical attack use cases, correlation rules, and UEBA risk scoring matrices are functioning at 100%:
 

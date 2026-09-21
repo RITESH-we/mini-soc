@@ -17,10 +17,6 @@
     
     <!-- Quick Status & Actions -->
     <div class="d-flex align-items-center gap-2 my-1">
-      <button class="btn btn-sm btn-outline-info d-flex align-items-center gap-1" data-bs-toggle="modal" data-bs-target="#pitchModal">
-        <span>👔</span>
-        <span>Executive Pitch Brief</span>
-      </button>
       <a href="/hunting" class="btn btn-sm btn-outline-warning d-flex align-items-center gap-1">
         <span>🎯</span>
         <span>Threat Hunting</span>
@@ -258,46 +254,7 @@
   </div>
 </div>
 
-<!-- Executive Pitch Briefing Modal -->
-<div class="modal fade" id="pitchModal" tabindex="-1">
-  <div class="modal-dialog modal-lg">
-    <div class="modal-content bg-dark border-info text-light">
-      <div class="modal-header border-secondary">
-        <h5 class="modal-title text-info fw-bold">👔 MiniSOC Platform — Executive &amp; Client Pitch Brief</h5>
-        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-      </div>
-      <div class="modal-body">
-        <div class="mb-3">
-          <h6 class="text-warning fw-bold">1. What is MiniSOC?</h6>
-          <p class="small text-muted mb-0">
-            MiniSOC is a unified, cloud-ready SIEM, XDR, and behavioral UEBA platform designed to eliminate the high licensing fees and operational bloat of legacy platforms like Splunk ES, Microsoft Sentinel, and IBM QRadar.
-          </p>
-        </div>
-        
-        <div class="mb-3">
-          <h6 class="text-warning fw-bold">2. Value Proposition for Clients &amp; Enterprise Teams</h6>
-          <ul class="small text-muted mb-0">
-            <li><strong>Zero Per-GB Indexing Tax:</strong> Built on open OCSF/ECS schemas with native sub-second indexing.</li>
-            <li><strong>Automated Active Containment:</strong> Enforces 1-click endpoint isolation and automated host-based firewall IPS drops.</li>
-            <li><strong>Native Behavioral UEBA:</strong> Calculates dynamic risk scores (0–100) for hosts and users out of the box.</li>
-            <li><strong>Autonomous AI Co-Pilot (Nova):</strong> Delivers instant Root Cause Analysis (RCA) and NIST SP 800-61 PDF compliance reports in seconds.</li>
-          </ul>
-        </div>
 
-        <div class="mb-3">
-          <h6 class="text-warning fw-bold">3. Commercial &amp; Pitch Rights</h6>
-          <div class="bg-black p-3 rounded small font-monospace text-success border border-secondary">
-            Licensed under MIT License with explicit Commercial Pitch, MSSP, and Client Deployment permissions. You can present, demonstrate, and deploy this solution for client engagements without legal restriction.
-          </div>
-        </div>
-      </div>
-      <div class="modal-footer border-secondary">
-        <a href="/incidents" class="btn btn-sm btn-outline-info">View Incident Cases</a>
-        <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Close Brief</button>
-      </div>
-    </div>
-  </div>
-</div>
 
 {% endblock %}
 
