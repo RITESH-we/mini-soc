@@ -17,12 +17,15 @@
     
     <!-- Quick Status & Actions -->
     <div class="d-flex align-items-center gap-2 my-1">
+      <span id="realtime-badge" class="badge bg-dark border border-success text-success d-flex align-items-center py-2 px-3 small">
+        <span class="pulse-dot"></span> Real-Time Live Sync Active
+      </span>
       <a href="/hunting" class="btn btn-sm btn-outline-warning d-flex align-items-center gap-1">
         <span>🎯</span>
         <span>Threat Hunting</span>
       </a>
-      <button class="btn btn-sm btn-outline-success" onclick="location.reload()">
-        <span>🔄 Refresh Stream</span>
+      <button class="btn btn-sm btn-outline-success" onclick="updateRealtimeMetrics(true)">
+        <span>🔄 Refresh</span>
       </button>
     </div>
   </div>
@@ -37,8 +40,8 @@
           <span class="text-muted small text-uppercase fw-bold">Critical &amp; High Threats</span>
           <span class="fs-4">🚨</span>
         </div>
-        <div class="fs-2 fw-bold text-danger">{{ critical_high }}</div>
-        <div class="small text-muted">Immediate triage required ({{ open_alerts }} total open)</div>
+        <div id="metric-critical-high" class="fs-2 fw-bold text-danger">{{ critical_high }}</div>
+        <div class="small text-muted">Immediate triage required (<span id="metric-open-alerts">{{ open_alerts }}</span> total open)</div>
       </div>
     </div>
   </div>
@@ -50,8 +53,8 @@
           <span class="text-muted small text-uppercase fw-bold">Monitored Fleet Health</span>
           <span class="fs-4">💻</span>
         </div>
-        <div class="fs-2 fw-bold text-info">{{ online_endpoints }} / {{ total_endpoints }}</div>
-        <div class="small text-muted">
+        <div id="metric-fleet-health" class="fs-2 fw-bold text-info">{{ online_endpoints }} / {{ total_endpoints }}</div>
+        <div class="small text-muted" id="metric-fleet-status">
           {% if isolated_endpoints > 0 %}
           <span class="text-danger fw-bold">⚠️ {{ isolated_endpoints }} host(s) quarantined</span>
           {% else %}
@@ -69,7 +72,7 @@
           <span class="text-muted small text-uppercase fw-bold">Active Firewall Blocks</span>
           <span class="fs-4">🛡️</span>
         </div>
-        <div class="fs-2 fw-bold text-warning">{{ blocked_ips_count }}</div>
+        <div id="metric-blocked-ips" class="fs-2 fw-bold text-warning">{{ blocked_ips_count }}</div>
         <div class="small text-muted">Host firewall IPS containment drops</div>
       </div>
     </div>
@@ -82,7 +85,7 @@
           <span class="text-muted small text-uppercase fw-bold">Active Investigations</span>
           <span class="fs-4">📁</span>
         </div>
-        <div class="fs-2 fw-bold text-success">{{ open_inc }}</div>
+        <div id="metric-open-inc" class="fs-2 fw-bold text-success">{{ open_inc }}</div>
         <div class="small text-muted">Formal escalated security cases</div>
       </div>
     </div>
@@ -209,7 +212,7 @@
             <th>Actions</th>
           </tr>
         </thead>
-        <tbody>
+        <tbody id="recent-alerts-tbody">
           {% for a in recent %}
           <tr class="alert-row" data-severity="{{ a.severity }}" data-status="{{ a.status }}">
             <td class="text-muted small font-monospace" style="width: 90px;">{{ a.timestamp[11:19] }}</td>
@@ -307,6 +310,76 @@ function quickEscalate(alertId, btn) {
       btn.textContent = '⚡ Escalate';
     });
 }
+
+// ── Continuous Real-Time Metrics & Live Ingestion Sync ──
+function updateRealtimeMetrics(manual = false) {
+  const badge = document.getElementById('realtime-badge');
+  fetch('/api/live/metrics')
+    .then(r => r.json())
+    .then(d => {
+      if (document.getElementById('metric-critical-high')) document.getElementById('metric-critical-high').textContent = d.critical_high;
+      if (document.getElementById('metric-open-alerts')) document.getElementById('metric-open-alerts').textContent = d.open_alerts;
+      if (document.getElementById('metric-fleet-health')) document.getElementById('metric-fleet-health').textContent = `${d.online_endpoints} / ${d.total_endpoints}`;
+      if (document.getElementById('metric-blocked-ips')) document.getElementById('metric-blocked-ips').textContent = d.blocked_ips_count;
+      if (document.getElementById('metric-open-inc')) document.getElementById('metric-open-inc').textContent = d.open_inc;
+
+      const statusEl = document.getElementById('metric-fleet-status');
+      if (statusEl) {
+        if (d.isolated_endpoints > 0) {
+          statusEl.innerHTML = `<span class="text-danger fw-bold">⚠️ ${d.isolated_endpoints} host(s) quarantined</span>`;
+        } else {
+          statusEl.innerHTML = `<span class="text-success">● 100% Endpoints nominal</span>`;
+        }
+      }
+
+      // Render Live Recent Alerts
+      const tbody = document.getElementById('recent-alerts-tbody');
+      if (tbody && d.recent_alerts && d.recent_alerts.length > 0) {
+        tbody.innerHTML = d.recent_alerts.map(a => {
+          const statusBadge = a.status === 'OPEN' ? 'bg-danger' : (a.status === 'FP' ? 'bg-secondary' : 'bg-success');
+          const timeStr = (a.timestamp || '').slice(11, 19);
+          return `
+            <tr class="alert-row" data-severity="${a.severity}" data-status="${a.status}">
+              <td class="text-muted small font-monospace" style="width: 90px;">${timeStr}</td>
+              <td>
+                <a href="/alerts?device=${encodeURIComponent(a.device_name || 'LENOVO')}" class="text-decoration-none">
+                  <span class="badge bg-dark border border-info text-info font-monospace py-1 px-2">
+                    💻 ${a.device_name || 'Localhost'}
+                  </span>
+                </a>
+              </td>
+              <td><span class="badge badge-${a.severity}">${a.severity}</span></td>
+              <td><span class="fw-bold text-light">${a.rule_name}</span></td>
+              <td>
+                <span class="badge bg-dark border border-secondary text-muted small font-monospace">
+                  ${a.mitre_technique || 'T1059'}
+                </span>
+              </td>
+              <td class="font-monospace small text-info">${a.src_user || '-'}</td>
+              <td class="font-monospace small text-warning">${a.src_ip || '-'}</td>
+              <td><span class="badge ${statusBadge}">${a.status}</span></td>
+              <td>
+                <div class="btn-group btn-group-sm">
+                  <button class="btn btn-xs btn-outline-warning py-0 px-2" onclick="quickEscalate(${a.id}, this)" title="Escalate to formal Incident">⚡ Escalate</button>
+                  <a href="/alerts" class="btn btn-xs btn-outline-info py-0 px-2" title="Investigate in Triage Workspace">Investigate</a>
+                </div>
+              </td>
+            </tr>
+          `;
+        }).join('');
+      }
+
+      if (badge) {
+        badge.innerHTML = `<span class="pulse-dot"></span> Live Sync: Active (${new Date().toLocaleTimeString()})`;
+      }
+    })
+    .catch(err => {
+      if (badge) badge.innerHTML = `<span class="text-warning">● Sync Paused</span>`;
+    });
+}
+
+// Auto-sync every 8 seconds
+setInterval(updateRealtimeMetrics, 8000);
 
 // Render Charts
 fetch('/api/stats').then(r=>r.json()).then(data=>{

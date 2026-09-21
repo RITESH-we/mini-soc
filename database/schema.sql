@@ -56,11 +56,12 @@ CREATE TABLE IF NOT EXISTS network_alerts (
 );
 
 CREATE TABLE IF NOT EXISTS blocked_ips (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    ip_address  TEXT UNIQUE,
-    reason      TEXT,
-    blocked_at  TEXT,
-    active      INTEGER DEFAULT 1
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    ip_address          TEXT UNIQUE,
+    reason              TEXT,
+    blocked_at          TEXT,
+    active              INTEGER DEFAULT 1,
+    containment_profile TEXT DEFAULT 'BIDIRECTIONAL_DROP'
 );
 
 CREATE TABLE IF NOT EXISTS endpoints (
@@ -72,7 +73,8 @@ CREATE TABLE IF NOT EXISTS endpoints (
     last_heartbeat  TEXT,
     status          TEXT DEFAULT 'ONLINE',
     pending_command TEXT DEFAULT NULL,
-    risk_score      INTEGER DEFAULT 0
+    risk_score      INTEGER DEFAULT 0,
+    profile         TEXT DEFAULT 'standard_workstation'
 );
 
 CREATE TABLE IF NOT EXISTS telemetry_logs (
@@ -95,6 +97,14 @@ CREATE TABLE IF NOT EXISTS entity_risk_scores (
     risk_level   TEXT DEFAULT 'LOW',
     factors      TEXT,
     last_updated TEXT
+);
+
+CREATE TABLE IF NOT EXISTS users (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    username     TEXT UNIQUE NOT NULL,
+    password     TEXT NOT NULL,
+    role         TEXT DEFAULT 'analyst',
+    display_name TEXT
 );
 
 -- High-Performance Enterprise Compound Indexes

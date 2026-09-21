@@ -77,6 +77,29 @@ DEFAULT_SERVER = "https://underfoot-such-italics.ngrok-free.dev/api/v1/telemetry
 AGENT_VERSION = "2.2.0"
 STATE_FILE = os.path.join(tempfile.gettempdir(), "minisoc_agent_state.json")
 
+# Policy Profiles: 'standard_workstation' (15s), 'high_security_server' (5s), 'audit_friend' (15s safe mode)
+CURRENT_PROFILE = "standard_workstation"
+CURRENT_INTERVAL = 15
+
+def normalize_profile(p: str) -> str:
+    p = (p or '').strip().lower()
+    if p in ['server', 'high_security_server', 'prod']:
+        return 'high_security_server'
+    elif p in ['friend', 'audit_friend', 'safe', 'byod']:
+        return 'audit_friend'
+    return 'standard_workstation'
+
+def sync_profile(new_p: str):
+    global CURRENT_PROFILE, CURRENT_INTERVAL
+    norm = normalize_profile(new_p)
+    if norm != CURRENT_PROFILE:
+        CURRENT_PROFILE = norm
+        if CURRENT_PROFILE == "high_security_server":
+            CURRENT_INTERVAL = 5
+        else:
+            CURRENT_INTERVAL = 15
+        log_msg(f"[!] Policy Profile synced from SOC console: {CURRENT_PROFILE} (Heartbeat: {CURRENT_INTERVAL}s)")
+
 def normalize_server_url(url: str) -> str:
     url = url.strip()
     if not url.startswith("http://") and not url.startswith("https://"):
@@ -115,6 +138,7 @@ def get_system_info():
         "os": get_friendly_os(),
         "architecture": platform.machine(),
         "agent_version": AGENT_VERSION,
+        "profile": CURRENT_PROFILE,
         "timestamp": datetime.now().isoformat()
     }
 
@@ -542,7 +566,11 @@ def execute_remediation(action_payload, server_url=None):
     target = action_payload.get("target")
     system = platform.system()
     
-    if action == "kill_process" and target:
+    if action == "set_profile" and action_payload.get("profile"):
+        sync_profile(action_payload.get("profile"))
+        return f"Profile updated to {CURRENT_PROFILE}"
+
+    elif action == "kill_process" and target:
         if system == "Windows":
             silent_run(["taskkill", "/F", "/PID", str(target)], capture_output=True)
         else:
@@ -552,27 +580,32 @@ def execute_remediation(action_payload, server_url=None):
 
     elif action == "block_remote_ip" and target:
         rule_name = f"MiniSOC_EDR_Drop_{target.replace(':', '_')}"
+        containment_profile = action_payload.get("containment_profile", "BIDIRECTIONAL_DROP")
         if system == "Windows":
+            # Always block outbound to prevent C2 communication / exfiltration
             r1 = silent_run([
                 "netsh", "advfirewall", "firewall", "add", "rule",
                 f"name={rule_name}", "dir=out", "action=block", f"remoteip={target}"
             ], capture_output=True, text=True)
-            r2 = silent_run([
-                "netsh", "advfirewall", "firewall", "add", "rule",
-                f"name={rule_name}_in", "dir=in", "action=block", f"remoteip={target}"
-            ], capture_output=True, text=True)
+            r2 = None
+            if containment_profile == "BIDIRECTIONAL_DROP":
+                r2 = silent_run([
+                    "netsh", "advfirewall", "firewall", "add", "rule",
+                    f"name={rule_name}_in", "dir=in", "action=block", f"remoteip={target}"
+                ], capture_output=True, text=True)
             if r1.returncode != 0:
                 err_msg = (r1.stderr or r1.stdout or "Elevation required").strip()
                 log_msg(f"[-] Active Defense Error: Failed to add Windows Firewall rule for {target}: {err_msg}")
                 return f"Firewall error: {err_msg}"
         elif system == "Linux":
             r1 = silent_run(["iptables", "-A", "OUTPUT", "-d", target, "-j", "DROP"], capture_output=True, text=True)
-            r2 = silent_run(["iptables", "-A", "INPUT", "-s", target, "-j", "DROP"], capture_output=True, text=True)
+            if containment_profile == "BIDIRECTIONAL_DROP":
+                silent_run(["iptables", "-A", "INPUT", "-s", target, "-j", "DROP"], capture_output=True, text=True)
             if r1.returncode != 0:
                 log_msg(f"[-] Active Defense Error: iptables returned {r1.returncode}")
                 return "iptables error"
-        log_msg(f"[!] Active Defense: Remote IP {target} dropped on local firewall by MiniSOC EDR.")
-        return f"IP {target} blocked locally"
+        log_msg(f"[!] Active Defense: Remote IP {target} dropped on local firewall by MiniSOC EDR ({containment_profile}).")
+        return f"IP {target} blocked locally ({containment_profile})"
 
     elif action == "unblock_remote_ip" and target:
         rule_name = f"MiniSOC_EDR_Drop_{target.replace(':', '_')}"
@@ -667,43 +700,56 @@ def send_telemetry(server_url):
                 # Commit watermark state ONLY after confirmed delivery
                 commit_agent_state(pending_state)
                 res_data = json.loads(response.read().decode("utf-8"))
+                if "profile" in res_data:
+                    sync_profile(res_data["profile"])
                 if "command" in res_data:
                     execute_remediation(res_data["command"], server_url=server_url)
                 return True, "Telemetry delivered"
     except Exception as e:
         return False, str(e)
 
-def run_agent(server_url=DEFAULT_SERVER, interval=15):
+def run_agent(server_url=DEFAULT_SERVER, interval=None, profile="standard_workstation"):
+    global CURRENT_PROFILE, CURRENT_INTERVAL
+    CURRENT_PROFILE = normalize_profile(profile)
+    if CURRENT_PROFILE == "high_security_server":
+        CURRENT_INTERVAL = 5
+    elif interval is not None:
+        CURRENT_INTERVAL = interval
+    else:
+        CURRENT_INTERVAL = 15
+
     server_url = normalize_server_url(server_url)
     log_msg("=" * 60)
     log_msg(f"  MiniSOC Endpoint Agent v{AGENT_VERSION} (Log Shipper & EDR)")
     log_msg(f"  Target Server: {server_url}")
-    log_msg(f"  Heartbeat Interval: {interval}s")
+    log_msg(f"  Active Policy Profile: {CURRENT_PROFILE}")
+    log_msg(f"  Heartbeat Interval: {CURRENT_INTERVAL}s")
     log_msg("=" * 60)
     
     while True:
         success, msg = send_telemetry(server_url)
         now_str = datetime.now().strftime("%H:%M:%S")
         if success:
-            log_msg(f"[{now_str}] [+] Heartbeat & telemetry delivered to {server_url}")
+            log_msg(f"[{now_str}] [+] Heartbeat & telemetry delivered to {server_url} (Profile: {CURRENT_PROFILE})")
         else:
             log_msg(f"[{now_str}] [-] Heartbeat delivery failed: {msg}")
-        time.sleep(interval)
+        time.sleep(CURRENT_INTERVAL)
 
-def install_service(server_url=DEFAULT_SERVER):
+def install_service(server_url=DEFAULT_SERVER, profile="standard_workstation"):
     server_url = normalize_server_url(server_url)
+    profile = normalize_profile(profile)
     system = platform.system()
     script_path = os.path.abspath(__file__)
     py_exe = sys.executable
 
-    print("[*] Installing MiniSOC Endpoint Agent as a persistent system service...")
+    print(f"[*] Installing MiniSOC Endpoint Agent (Profile: {profile}) as a persistent system service...")
 
     if system == "Windows":
         pyw_exe = os.path.join(os.path.dirname(py_exe), "pythonw.exe")
         runner = pyw_exe if os.path.exists(pyw_exe) else py_exe
 
         task_name = "MiniSOC_Endpoint_Agent"
-        cmd_to_run = f'"{runner}" "{script_path}" "{server_url}"'
+        cmd_to_run = f'"{runner}" "{script_path}" "{server_url}" --profile "{profile}"'
 
         # 1. First, attempt Windows Task Scheduler (ideal if running as Administrator)
         create_cmd = [
@@ -728,7 +774,7 @@ def install_service(server_url=DEFAULT_SERVER):
             startup_dir = os.path.join(os.environ.get('APPDATA', ''), 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup')
             if os.path.exists(startup_dir):
                 vbs_path = os.path.join(startup_dir, "minisoc_agent.vbs")
-                vbs_content = f'Set WshShell = CreateObject("WScript.Shell")\r\nWshShell.Run """{runner}"" ""{script_path}"" ""{server_url}""", 0, False\r\n'
+                vbs_content = f'Set WshShell = CreateObject("WScript.Shell")\r\nWshShell.Run """{runner}"" ""{script_path}"" ""{server_url}"" --profile ""{profile}""", 0, False\r\n'
                 with open(vbs_path, "w") as f:
                     f.write(vbs_content)
                 
@@ -752,7 +798,7 @@ After=network.target
 
 [Service]
 Type=simple
-ExecStart={py_exe} {script_path} {server_url}
+ExecStart={py_exe} {script_path} {server_url} --profile {profile}
 Restart=always
 RestartSec=10
 StandardOutput=journal
@@ -828,13 +874,18 @@ def uninstall_service():
 
 if __name__ == "__main__":
     args = sys.argv[1:]
+    chosen_profile = "standard_workstation"
+    if "--profile" in args:
+        idx = args.index("--profile")
+        if idx + 1 < len(args):
+            chosen_profile = normalize_profile(args[idx + 1])
+
     if "--install" in args:
         target = DEFAULT_SERVER
-        for a in args:
-            if a != "--install" and not a.startswith("--"):
-                target = a
-                break
-        install_service(target)
+        clean_args = [a for a in args if a not in ["--install", "--profile"] and a != chosen_profile and not a.startswith("--")]
+        if clean_args:
+            target = clean_args[0]
+        install_service(target, profile=chosen_profile)
     elif "--uninstall" in args:
         uninstall_service()
     elif "--status" in args:
@@ -852,5 +903,8 @@ if __name__ == "__main__":
         else:
             subprocess.run(["systemctl", "status", "minisoc-agent"])
     else:
-        target = args[0] if len(args) > 0 and not args[0].startswith("--") else DEFAULT_SERVER
-        run_agent(target)
+        target = DEFAULT_SERVER
+        clean_args = [a for a in args if a not in ["--profile"] and a != chosen_profile and not a.startswith("--")]
+        if clean_args:
+            target = clean_args[0]
+        run_agent(target, profile=chosen_profile)

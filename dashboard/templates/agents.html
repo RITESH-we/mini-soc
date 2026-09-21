@@ -26,6 +26,7 @@
             <th>Operating System</th>
             <th>Architecture</th>
             <th>Agent Version</th>
+            <th>Policy Profile</th>
             <th>Last Heartbeat</th>
             <th>Containment Status</th>
             <th>UEBA Risk</th>
@@ -40,6 +41,25 @@
             <td>{{ ep.os }}</td>
             <td class="text-muted small">{{ ep.architecture }}</td>
             <td><span class="badge bg-info">v{{ ep.agent_version }}</span></td>
+            <td>
+              <div class="dropdown">
+                <button class="btn btn-xs py-0 px-2 dropdown-toggle {% if ep.profile == 'high_security_server' %}btn-outline-danger{% elif ep.profile == 'audit_friend' %}btn-outline-warning{% else %}btn-outline-info{% endif %}" type="button" data-bs-toggle="dropdown" title="Click to change policy profile">
+                  {% if ep.profile == 'high_security_server' %}
+                    🛡️ Server (Strict)
+                  {% elif ep.profile == 'audit_friend' %}
+                    🤝 Friend / Safe
+                  {% else %}
+                    💻 Workstation
+                  {% endif %}
+                </button>
+                <ul class="dropdown-menu dropdown-menu-dark small shadow">
+                  <li><h6 class="dropdown-header text-muted">Select Security Profile</h6></li>
+                  <li><a class="dropdown-item {% if ep.profile == 'standard_workstation' or not ep.profile %}active{% endif %}" href="javascript:void(0)" onclick="setEndpointProfile('{{ ep.hostname }}', 'standard_workstation')">💻 Workstation (Standard EDR - 15s)</a></li>
+                  <li><a class="dropdown-item {% if ep.profile == 'high_security_server' %}active{% endif %}" href="javascript:void(0)" onclick="setEndpointProfile('{{ ep.hostname }}', 'high_security_server')">🛡️ Server (High-Security / 5s / Auto-Block)</a></li>
+                  <li><a class="dropdown-item {% if ep.profile == 'audit_friend' %}active{% endif %}" href="javascript:void(0)" onclick="setEndpointProfile('{{ ep.hostname }}', 'audit_friend')">🤝 Friend / BYOD (Safe Audit Mode - No Disruption)</a></li>
+                </ul>
+              </div>
+            </td>
             <td class="text-muted small">{{ ep.last_heartbeat[:19] }}</td>
             <td>
               {% if ep.status == 'ISOLATED' %}
@@ -308,6 +328,24 @@ function restoreHost(hostname) {
       location.reload();
     })
     .catch(e => alert("Error: " + e));
+}
+
+function setEndpointProfile(hostname, profile) {
+  fetch(`/api/agents/${encodeURIComponent(hostname)}/profile`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({profile: profile})
+  })
+  .then(r => r.json())
+  .then(d => {
+    if (d.success) {
+      alert(`[+] Policy Profile Updated!\n\nHost: ${hostname}\nNew Profile: ${profile}\n\nThe agent will adopt this policy profile on its next heartbeat.`);
+      location.reload();
+    } else {
+      alert(`Failed to update profile: ${d.error || 'Unknown error'}`);
+    }
+  })
+  .catch(err => alert('Network error: ' + err));
 }
 </script>
 {% endblock %}

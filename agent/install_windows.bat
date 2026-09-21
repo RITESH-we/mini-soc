@@ -22,17 +22,37 @@ if "%TARGET_URL%"=="" (
     set TARGET_URL=https://underfoot-such-italics.ngrok-free.dev/api/v1/telemetry
 )
 
+:: 3. Select Security Policy Profile
+set PROFILE_CHOICE=%2
+if "%PROFILE_CHOICE%"=="" (
+    echo Choose Security Policy Profile for this endpoint:
+    echo   [1] Standard Workstation  (Normal 15s Heartbeat, Analyst Containment) [Default]
+    echo   [2] High-Security Server  (Fast 5s Heartbeat, Strict Auto-Block)
+    echo   [3] Friend's PC / Safe    (Non-Disruptive Audit Mode - No Automatic Lockouts)
+    echo.
+    set /p P_SEL="Select option [1-3, default 1]: "
+    if "%P_SEL%"=="2" (
+        set PROFILE_CHOICE=high_security_server
+    ) else if "%P_SEL%"=="3" (
+        set PROFILE_CHOICE=audit_friend
+    ) else (
+        set PROFILE_CHOICE=standard_workstation
+    )
+)
+
+echo.
 echo [*] Target SOC Server: %TARGET_URL%
+echo [*] Policy Profile:   %PROFILE_CHOICE%
 echo [*] Enrolling endpoint with Administrator privileges...
 echo.
 
-:: 3. Execute installation with python or virtual environment
+:: 4. Execute installation with python or virtual environment
 where python >nul 2>&1
 if %errorLevel% equ 0 (
-    python endpoint_agent.py --install "%TARGET_URL%"
+    python endpoint_agent.py --install "%TARGET_URL%" --profile "%PROFILE_CHOICE%"
 ) else (
     if exist "..\venv\Scripts\python.exe" (
-        "..\venv\Scripts\python.exe" endpoint_agent.py --install "%TARGET_URL%"
+        "..\venv\Scripts\python.exe" endpoint_agent.py --install "%TARGET_URL%" --profile "%PROFILE_CHOICE%"
     ) else (
         echo [!] Error: Python was not found in PATH or ..\venv\
         echo     Please install Python 3.11+ and check 'Add python.exe to PATH'.
@@ -44,6 +64,7 @@ if %errorLevel% equ 0 (
 echo.
 echo ================================================================
 echo   Installation completed with HIGHEST Administrator Privileges!
+echo   Active Profile: %PROFILE_CHOICE%
 echo   The agent is now active and will automatically start on boot.
 echo ================================================================
 echo.

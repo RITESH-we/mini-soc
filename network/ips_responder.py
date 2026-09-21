@@ -24,9 +24,10 @@ def get_hidden_subprocess_flags():
             pass
     return flags
 
-def block_ip(ip: str, reason: str = "MiniSOC Automated IPS Rule") -> dict:
+def block_ip(ip: str, reason: str = "MiniSOC Automated IPS Rule", containment_profile: str = "BIDIRECTIONAL_DROP") -> dict:
     """
     Active defense: applies host firewall blocking rule for malicious remote IP.
+    Supported containment profiles: 'BIDIRECTIONAL_DROP' (in+out), 'OUTBOUND_C2_DROP' (out only).
     """
     if is_private_ip(ip):
         return {"success": False, "message": f"Skipped blocking private/loopback IP {ip}"}
@@ -37,15 +38,7 @@ def block_ip(ip: str, reason: str = "MiniSOC Automated IPS Rule") -> dict:
     
     try:
         if system == "Windows":
-            cmd = [
-                "netsh", "advfirewall", "firewall", "add", "rule",
-                f"name={rule_name}",
-                "dir=in",
-                "action=block",
-                f"remoteip={ip}"
-            ]
-            subprocess.run(cmd, check=True, capture_output=True, **flags)
-            # Also block outbound
+            # Always block outbound to stop C2 beacons / data exfiltration
             cmd_out = [
                 "netsh", "advfirewall", "firewall", "add", "rule",
                 f"name={rule_name}_out",
@@ -54,24 +47,41 @@ def block_ip(ip: str, reason: str = "MiniSOC Automated IPS Rule") -> dict:
                 f"remoteip={ip}"
             ]
             subprocess.run(cmd_out, capture_output=True, **flags)
+
+            # Block inbound if BIDIRECTIONAL_DROP
+            if containment_profile == "BIDIRECTIONAL_DROP":
+                cmd_in = [
+                    "netsh", "advfirewall", "firewall", "add", "rule",
+                    f"name={rule_name}",
+                    "dir=in",
+                    "action=block",
+                    f"remoteip={ip}"
+                ]
+                subprocess.run(cmd_in, capture_output=True, **flags)
         else:
-            cmd = ["iptables", "-A", "INPUT", "-s", ip, "-j", "DROP"]
-            subprocess.run(cmd, check=True, capture_output=True)
+            subprocess.run(["iptables", "-A", "OUTPUT", "-d", ip, "-j", "DROP"], capture_output=True)
+            if containment_profile == "BIDIRECTIONAL_DROP":
+                subprocess.run(["iptables", "-A", "INPUT", "-s", ip, "-j", "DROP"], capture_output=True)
 
         # Store in database
         conn = get_conn()
         try:
             conn.execute("""
-                INSERT OR REPLACE INTO blocked_ips (ip_address, reason, blocked_at, active)
-                VALUES (?, ?, ?, 1)
-            """, (ip, reason, datetime.now().isoformat()))
+                INSERT INTO blocked_ips (ip_address, reason, blocked_at, active, containment_profile)
+                VALUES (?, ?, ?, 1, ?)
+                ON CONFLICT(ip_address) DO UPDATE SET
+                    reason=excluded.reason,
+                    blocked_at=excluded.blocked_at,
+                    active=1,
+                    containment_profile=excluded.containment_profile
+            """, (ip, reason, datetime.now().isoformat(), containment_profile))
             conn.commit()
         finally:
             conn.close()
 
-        return {"success": True, "message": f"IP {ip} successfully blocked via firewall."}
+        return {"success": True, "message": f"IP {ip} blocked ({containment_profile}).", "rule": rule_name}
     except Exception as e:
-        return {"success": False, "message": f"Firewall execution failed: {str(e)}"}
+        return {"success": False, "message": f"Failed to block: {str(e)}"}
 
 def unblock_ip(ip: str) -> dict:
     rule_name = f"MiniSOC_IPS_Block_{ip.replace(':', '_')}"

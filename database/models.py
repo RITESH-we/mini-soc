@@ -13,7 +13,7 @@ def get_conn():
 
 def init_db():
     conn = get_conn()
-    # Ensure threat_category exists in alerts table if it already exists
+    # Auto-migrate columns if tables already exist
     try:
         cols = [r['name'] for r in conn.execute("PRAGMA table_info(alerts)").fetchall()]
         if cols and 'threat_category' not in cols:
@@ -22,8 +22,39 @@ def init_db():
     except Exception:
         pass
 
+    try:
+        ep_cols = [r['name'] for r in conn.execute("PRAGMA table_info(endpoints)").fetchall()]
+        if ep_cols and 'profile' not in ep_cols:
+            conn.execute("ALTER TABLE endpoints ADD COLUMN profile TEXT DEFAULT 'standard_workstation'")
+            conn.commit()
+    except Exception:
+        pass
+
+    try:
+        block_cols = [r['name'] for r in conn.execute("PRAGMA table_info(blocked_ips)").fetchall()]
+        if block_cols and 'containment_profile' not in block_cols:
+            conn.execute("ALTER TABLE blocked_ips ADD COLUMN containment_profile TEXT DEFAULT 'BIDIRECTIONAL_DROP'")
+            conn.commit()
+    except Exception:
+        pass
+
     with open(SCHEMA, 'r', encoding='utf-8') as f:
         conn.executescript(f.read())
+
+    # Seed default user accounts if empty
+    try:
+        user_count = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+        if user_count == 0:
+            default_users = [
+                ('admin', 'minisoc@admin', 'admin', 'SOC Administrator'),
+                ('analyst', 'minisoc@analyst', 'analyst', 'Tier 1/2 Analyst'),
+                ('rites', 'password123', 'admin', 'Ritesh (Lead SecOps)')
+            ]
+            conn.executemany("INSERT INTO users (username, password, role, display_name) VALUES (?, ?, ?, ?)", default_users)
+            conn.commit()
+    except Exception:
+        pass
+
     conn.commit()
     conn.close()
     print('[DB] Database schema initialized, WAL enabled, and indexes synchronized.')

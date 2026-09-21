@@ -189,6 +189,16 @@
           <span class="pulse-dot"></span>
           <span>Health</span>
         </button>
+        {% if session.get('user') %}
+        <div class="d-flex align-items-center ms-lg-2 gap-2 my-1 my-lg-0">
+          <span class="badge bg-secondary text-light px-2 py-1 font-monospace" title="Active Analyst Profile">
+            👤 {{ session.get('display_name') or session.get('user') }} <span class="text-info">({{ session.get('role', 'analyst')|upper }})</span>
+          </span>
+          <a href="/logout" class="btn btn-sm btn-outline-danger py-0 px-2" title="Sign out of SOC Console">
+            🚪 Logout
+          </a>
+        </div>
+        {% endif %}
       </div>
     </div>
   </div>

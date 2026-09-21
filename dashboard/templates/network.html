@@ -28,6 +28,13 @@
             <label class="form-label small text-muted">Justification / Threat Intel Reason</label>
             <input type="text" name="reason" class="form-control bg-dark text-light border-secondary" placeholder="Adversary C2 / Port Scan" value="Analyst manual containment block">
           </div>
+          <div class="mb-3">
+            <label class="form-label small text-muted">Containment Profile</label>
+            <select name="containment_profile" class="form-select form-select-sm bg-dark text-light border-secondary">
+              <option value="BIDIRECTIONAL_DROP" selected>🛡️ Bidirectional Drop (Inbound + Outbound)</option>
+              <option value="OUTBOUND_C2_DROP">📡 Outbound C2 Drop Only (Stop Exfiltration)</option>
+            </select>
+          </div>
           <div class="d-flex gap-2">
             <button type="submit" formaction="/network/block" class="btn btn-danger flex-grow-1">🚫 Block IP</button>
             <button type="submit" formaction="/network/unblock" class="btn btn-success flex-grow-1">🟢 Unblock IP</button>
@@ -51,6 +58,7 @@
               <tr>
                 <th>Blocked IP</th>
                 <th>Reason</th>
+                <th>Profile</th>
                 <th>Blocked At</th>
                 <th>Status</th>
                 <th>Action</th>
@@ -61,6 +69,11 @@
               <tr>
                 <td class="text-danger fw-bold font-monospace">{{ b.ip_address }}</td>
                 <td class="small">{{ b.reason }}</td>
+                <td>
+                  <span class="badge bg-dark border border-info text-info font-monospace small">
+                    {{ 'IN+OUT' if (b.containment_profile or 'BIDIRECTIONAL_DROP') == 'BIDIRECTIONAL_DROP' else 'OUT-ONLY' }}
+                  </span>
+                </td>
                 <td class="text-muted small">{{ b.blocked_at[:19] }}</td>
                 <td>
                   <span class="badge {% if b.active==1 %}bg-danger{% else %}bg-secondary{% endif %}">

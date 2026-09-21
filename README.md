@@ -120,8 +120,16 @@ Comparing MiniSOC against the **7 Core Technical Pillars of an Enterprise SIEM**
 - **Private RFC 1918 Filter**: Automatically detects internal/loopback traffic, returning instant LAN classification without wasting external API quota.
 
 ### 5. Proactive Endpoint Defense & SOAR Containment (EDR)
+- **Granular Endpoint Policy Profiles**:
+  - **`standard_workstation`** (Default): Balanced 15-second heartbeat, analyst-driven containment, low resource footprint.
+  - **`high_security_server`**: High-frequency 5-second heartbeat with strict automated kernel-level drop enforcement against critical C2 and port sweeps.
+  - **`audit_friend` (Safe BYOD Mode)**: Designed for friends' laptops, home systems, or lab endpoints. Streams full OCSF event logs, process tables, and active sockets while completely disabling disruptive automated firewall locks, ensuring regular browsing and gaming are never interrupted.
+- **Selectable Firewall Containment Profiles**:
+  - **`BIDIRECTIONAL_DROP`**: Inbound + Outbound kernel-level drop on remote IP (`netsh` / `iptables`).
+  - **`OUTBOUND_C2_DROP`**: Drops outbound packets only (severing attacker C2 beaconing and data exfiltration while preserving diagnostic inbound pings).
+  - **`HOST_QUARANTINE`**: Complete network isolation of a compromised endpoint while preserving the SOC management communication channel.
 - **Bidirectional Endpoint-Edge Firewall Drops & 1-Click Unblock**: When an analyst or IPS rule blocks an IP, the command is dispatched down to all active endpoint agents, enforcing kernel-level firewall drops (`netsh advfirewall` / `iptables`) on the devices themselves. Blocks can be lifted just as easily with 1-click (`🟢 Unblock IP`) from either the Alerts triage feed or the Network Security Monitoring console, immediately clearing local host firewall rules.
-- **1-Click Host Quarantine with SOC Fail-Safe**: Instantly isolates compromised endpoints from lateral movement and external networks while preserving the SOC management communication channel.
+- **Continuous Real-Time Live Sync**: The Operations Center dashboard features a real-time auto-synchronization engine (`/api/live/metrics`) that polls every 8 seconds, dynamically updating threat counts, fleet health status, and live alert feeds without full-page reloads.
 - **Autonomous Process Termination**: Remote and automated termination of attacker tooling (`mimikatz`, `nc.exe`, `psexec.exe`).
 - **Live NSM Inspection**: Robust IPv4/IPv6 socket inspection detecting inbound port sweeps (T1046) and cleartext protocol exposure (T1040).
 
@@ -299,6 +307,15 @@ python dashboard/app.py
 # Terminal 3 — Deploy Endpoint Telemetry Agent (Interactive Mode):
 python agent/endpoint_agent.py http://127.0.0.1:5000/api/v1/telemetry
 ```
+
+#### 🔐 Default SOC Analyst & Admin Access Credentials:
+To access the Operations Center console, authenticate with any of the built-in role profiles:
+
+| User ID / Username | Password | Role / Access Level | Operational Capabilities |
+| :--- | :--- | :--- | :--- |
+| **`admin`** | `minisoc@admin` | **SOC Administrator** | Full fleet policy control, kernel firewall drops, host quarantine, settings |
+| **`analyst`** | `minisoc@analyst` | **Security Analyst** | L1/L2 Alert triage, deep forensic inspection, IOC enrichment, escalation |
+| **`rites`** | `password123` | **Lead SecOps Engineer** | Root administrative access & incident investigation |
 
 ### Option B: Persistent Endpoint Agent Deployment (Survives Reboots)
 

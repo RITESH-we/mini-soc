@@ -3,7 +3,7 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
 
-from flask import Flask, render_template, jsonify, request, redirect, url_for, send_file, Response
+from flask import Flask, render_template, jsonify, request, redirect, url_for, send_file, Response, session
 from database.models import get_conn, init_db
 from datetime import datetime
 from reports.ir_generator import generate_pdf_report
@@ -18,7 +18,78 @@ with open(CONFIG_PATH, 'r', encoding='utf-8') as f:
     config = yaml.safe_load(f)
 
 app = Flask(__name__)
+app.secret_key = config.get('secret_key', 'minisoc-enterprise-secret-key-2026-auth')
 init_db()
+
+# ── Authentication Gatekeeper & Session Management ────────────
+EXEMPT_ROUTES = {
+    '/login', '/logout', '/health', '/api/health',
+    '/api/v1/telemetry', '/api/v1/ingest/cloud', '/api/v1/cloud/ingest'
+}
+
+@app.before_request
+def auth_gatekeeper():
+    if request.path.startswith('/static') or request.path in EXEMPT_ROUTES:
+        return None
+    if 'user' not in session:
+        if request.path.startswith('/api/'):
+            return jsonify({'error': 'Authentication required. Please authenticate at /login'}), 401
+        return redirect(url_for('login_view', next=request.path))
+
+@app.route('/login', methods=['GET', 'POST'])
+def login_view():
+    error = None
+    next_url = request.args.get('next') or request.form.get('next') or '/'
+    if request.method == 'POST':
+        username = (request.form.get('username') or '').strip().lower()
+        password = (request.form.get('password') or '').strip()
+        conn = get_conn()
+        try:
+            user = conn.execute("SELECT * FROM users WHERE LOWER(username)=? AND password=?", (username, password)).fetchone()
+            if user:
+                session['user'] = user['username']
+                session['role'] = user['role']
+                session['display_name'] = user['display_name'] or user['username']
+                return redirect(next_url if (next_url and next_url.startswith('/')) else '/')
+            else:
+                error = "Invalid User ID or Password. Check credentials and retry."
+        finally:
+            conn.close()
+    return render_template('login.html', error=error, next_url=next_url)
+
+@app.route('/logout')
+def logout_view():
+    session.clear()
+    return redirect(url_for('login_view'))
+
+# ── Real-Time Metrics API (Continuous Stream Sync) ────────────
+@app.route('/api/live/metrics')
+def api_live_metrics():
+    conn         = get_conn()
+    total_alerts = conn.execute('SELECT COUNT(*) FROM alerts').fetchone()[0]
+    open_alerts  = conn.execute("SELECT COUNT(*) FROM alerts WHERE status='OPEN'").fetchone()[0]
+    critical_high= conn.execute("SELECT COUNT(*) FROM alerts WHERE severity IN ('CRITICAL', 'HIGH')").fetchone()[0]
+    open_inc     = conn.execute("SELECT COUNT(*) FROM incidents WHERE status!='CLOSED'").fetchone()[0]
+    
+    total_eps    = conn.execute('SELECT COUNT(*) FROM endpoints').fetchone()[0]
+    online_eps   = conn.execute("SELECT COUNT(*) FROM endpoints WHERE status='ONLINE'").fetchone()[0]
+    isolated_eps = conn.execute("SELECT COUNT(*) FROM endpoints WHERE status='ISOLATED'").fetchone()[0]
+    blocked_count = conn.execute("SELECT COUNT(*) FROM blocked_ips WHERE active=1").fetchone()[0]
+    recent       = [dict(r) for r in conn.execute('SELECT * FROM alerts ORDER BY id DESC LIMIT 15').fetchall()]
+    conn.close()
+    
+    return jsonify({
+        'total_alerts': total_alerts,
+        'open_alerts': open_alerts,
+        'critical_high': critical_high,
+        'open_inc': open_inc,
+        'total_endpoints': total_eps,
+        'online_endpoints': online_eps,
+        'isolated_endpoints': isolated_eps,
+        'blocked_ips_count': blocked_count,
+        'recent_alerts': recent,
+        'timestamp': datetime.now().isoformat()
+    })
 
 def get_all_devices(conn):
     alert_devs = [r[0] for r in conn.execute("SELECT DISTINCT device_name FROM alerts WHERE device_name IS NOT NULL AND device_name!=''").fetchall()]
@@ -406,19 +477,38 @@ def handle_manual_block():
         req_json = {}
     ip = (req_json.get('ip') or req_json.get('ip_address') or request.form.get('ip') or request.form.get('ip_address') or '').strip()
     reason = req_json.get('reason') or request.form.get('reason', 'Analyst Manual Block')
+    containment_profile = req_json.get('containment_profile') or request.form.get('containment_profile', 'BIDIRECTIONAL_DROP')
+    if containment_profile not in ['BIDIRECTIONAL_DROP', 'OUTBOUND_C2_DROP', 'HOST_QUARANTINE']:
+        containment_profile = 'BIDIRECTIONAL_DROP'
     if ip:
-        block_ip(ip, reason=reason)
+        block_ip(ip, reason=reason, containment_profile=containment_profile)
         # Push proactive EDR drop rule down to all active endpoint agents
         conn = get_conn()
         try:
-            cmd_json = json.dumps({"action": "block_remote_ip", "target": ip, "reason": reason})
+            cmd_json = json.dumps({"action": "block_remote_ip", "target": ip, "reason": reason, "containment_profile": containment_profile})
             conn.execute("UPDATE endpoints SET pending_command=? WHERE status != 'OFFLINE'", (cmd_json,))
             conn.commit()
         finally:
             conn.close()
     if request.is_json or request.path.startswith('/api/'):
-        return jsonify({'success': True, 'ip': ip, 'action': 'blocked'})
+        return jsonify({'success': True, 'ip': ip, 'action': 'blocked', 'containment_profile': containment_profile})
     return redirect(url_for('network_view'))
+
+@app.route('/api/agents/<hostname>/profile', methods=['POST'])
+def update_agent_profile(hostname):
+    req_json = request.get_json(silent=True) or {}
+    new_profile = req_json.get('profile') or request.form.get('profile', 'standard_workstation')
+    if new_profile not in ['standard_workstation', 'high_security_server', 'audit_friend']:
+        return jsonify({'error': 'Invalid policy profile. Choose standard_workstation, high_security_server, or audit_friend'}), 400
+    conn = get_conn()
+    try:
+        conn.execute("UPDATE endpoints SET profile=? WHERE hostname=?", (new_profile, hostname))
+        cmd_json = json.dumps({"action": "set_profile", "profile": new_profile})
+        conn.execute("UPDATE endpoints SET pending_command=? WHERE hostname=?", (cmd_json, hostname))
+        conn.commit()
+    finally:
+        conn.close()
+    return jsonify({'success': True, 'hostname': hostname, 'profile': new_profile})
 
 @app.route('/network/unblock', methods=['POST'])
 @app.route('/api/network/unblock', methods=['POST'])
@@ -506,16 +596,18 @@ def receive_telemetry():
 
         # Update or insert endpoint record
         current_status = ep_row['status'] if ep_row else 'ONLINE'
+        agent_profile = data.get('profile') or 'standard_workstation'
+        active_profile = (ep_row['profile'] if (ep_row and ep_row['profile']) else agent_profile)
         conn.execute("""
-            INSERT INTO endpoints (hostname, ip_address, os, architecture, agent_version, last_heartbeat, status)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO endpoints (hostname, ip_address, os, architecture, agent_version, last_heartbeat, status, profile)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(hostname) DO UPDATE SET
                 ip_address=excluded.ip_address,
                 os=excluded.os,
                 architecture=excluded.architecture,
                 agent_version=excluded.agent_version,
                 last_heartbeat=excluded.last_heartbeat
-        """, (hostname, ip_addr, os_name, arch, ver, now_iso, current_status))
+        """, (hostname, ip_addr, os_name, arch, ver, now_iso, current_status, active_profile))
 
         # Store security posture telemetry if provided
         if posture:
@@ -706,7 +798,7 @@ def receive_telemetry():
     if user_seen:
         calculate_entity_risk(user_seen, "USER")
 
-    res = {'status': 'acknowledged', 'node': hostname}
+    res = {'status': 'acknowledged', 'node': hostname, 'profile': active_profile}
     if cmd_to_send:
         res['command'] = cmd_to_send
     return jsonify(res)
