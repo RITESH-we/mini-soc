@@ -240,15 +240,25 @@ MiniSOC implements end-to-end telemetry harvesting, real-time correlation, UEBA 
 
 ## 🚀 Quickstart Guide
 
-### Option A: Local Development
+### Option A: Local Development & Public Tunnel
 
+#### 1-Click Launch (Dashboard + Ngrok Public Tunnel):
 ```powershell
-# 1. Activate environment & start dashboard
+.\start_soc.bat
+```
+
+#### Or Run Manually in Separate Terminals:
+```powershell
+# Terminal 1 — Start SOC Dashboard Server:
 venv\Scripts\activate
 python dashboard/app.py
 # Access Web Console at: http://127.0.0.1:5000
 
-# 2. Deploy Endpoint Telemetry Agent (Interactive Debug Mode)
+# Terminal 2 — Start Ngrok Public Tunnel:
+.\ngrok.exe http --url=underfoot-such-italics.ngrok-free.dev 5000
+# Access Public Tunnel at: https://underfoot-such-italics.ngrok-free.dev
+
+# Terminal 3 — Deploy Endpoint Telemetry Agent (Interactive Mode):
 python agent/endpoint_agent.py http://127.0.0.1:5000/api/v1/telemetry
 ```
 
