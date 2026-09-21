@@ -87,10 +87,13 @@ def alerts():
 
     query += ' ORDER BY id DESC LIMIT 300'
     rows = conn.execute(query, params).fetchall()
+
+    blocked_rows = conn.execute("SELECT ip_address FROM blocked_ips WHERE active=1").fetchall()
+    blocked_ips_set = set(r['ip_address'] for r in blocked_rows)
     conn.close()
 
     return render_template('alerts.html', alerts=rows, severity=sev, category=cat,
-                           devices=devices, current_device=device)
+                           devices=devices, current_device=device, blocked_ips=blocked_ips_set)
 
 @app.route('/api/alerts/export')
 def export_alerts_csv():
@@ -392,12 +395,17 @@ def download_incident_report(iid):
 def network_view():
     net_alerts = get_recent_network_alerts(limit=50)
     blocked = list_blocked_ips()
-    return render_template('network.html', net_alerts=net_alerts, blocked_ips=blocked)
+    active_blocked = set(b['ip_address'] for b in blocked if b.get('active') == 1)
+    return render_template('network.html', net_alerts=net_alerts, blocked_ips=blocked, active_blocked=active_blocked)
 
 @app.route('/network/block', methods=['POST'])
+@app.route('/api/network/block', methods=['POST'])
 def handle_manual_block():
-    ip = (request.form.get('ip_address') or '').strip()
-    reason = request.form.get('reason', 'Analyst Manual Block')
+    req_json = request.get_json(silent=True) or {}
+    if not isinstance(req_json, dict):
+        req_json = {}
+    ip = (req_json.get('ip') or req_json.get('ip_address') or request.form.get('ip') or request.form.get('ip_address') or '').strip()
+    reason = req_json.get('reason') or request.form.get('reason', 'Analyst Manual Block')
     if ip:
         block_ip(ip, reason=reason)
         # Push proactive EDR drop rule down to all active endpoint agents
@@ -408,11 +416,17 @@ def handle_manual_block():
             conn.commit()
         finally:
             conn.close()
+    if request.is_json or request.path.startswith('/api/'):
+        return jsonify({'success': True, 'ip': ip, 'action': 'blocked'})
     return redirect(url_for('network_view'))
 
 @app.route('/network/unblock', methods=['POST'])
+@app.route('/api/network/unblock', methods=['POST'])
 def handle_unblock():
-    ip = (request.form.get('ip_address') or '').strip()
+    req_json = request.get_json(silent=True) or {}
+    if not isinstance(req_json, dict):
+        req_json = {}
+    ip = (req_json.get('ip') or req_json.get('ip_address') or request.form.get('ip') or request.form.get('ip_address') or '').strip()
     if ip:
         unblock_ip(ip)
         # Push unblock command to active endpoints
@@ -423,6 +437,8 @@ def handle_unblock():
             conn.commit()
         finally:
             conn.close()
+    if request.is_json or request.path.startswith('/api/'):
+        return jsonify({'success': True, 'ip': ip, 'action': 'unblocked'})
     return redirect(url_for('network_view'))
 
 @app.route('/api/network/inspect')

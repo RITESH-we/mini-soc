@@ -4,14 +4,47 @@ echo ================================================================
 echo   MiniSOC v2.2 Enterprise - Automated Agent Persistence Installer
 echo ================================================================
 echo.
+
+:: 1. Self-elevation check for Administrator rights (required to control Windows Firewall)
+net session >nul 2>&1
+if %errorLevel% neq 0 (
+    echo [*] Administrator privileges required to manage Windows Firewall policies.
+    echo [*] Requesting UAC elevation...
+    powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Process cmd.exe -ArgumentList '/c \"\"%~f0\" %*\"' -Verb RunAs"
+    exit /b
+)
+
 cd /d "%~dp0"
 
-REM If python is in PATH or venv
-python endpoint_agent.py --install %1
+:: 2. Target SOC server URL (default to live public domain if none provided)
+set TARGET_URL=%1
+if "%TARGET_URL%"=="" (
+    set TARGET_URL=https://underfoot-such-italics.ngrok-free.dev/api/v1/telemetry
+)
+
+echo [*] Target SOC Server: %TARGET_URL%
+echo [*] Enrolling endpoint with Administrator privileges...
+echo.
+
+:: 3. Execute installation with python or virtual environment
+where python >nul 2>&1
+if %errorLevel% equ 0 (
+    python endpoint_agent.py --install "%TARGET_URL%"
+) else (
+    if exist "..\venv\Scripts\python.exe" (
+        "..\venv\Scripts\python.exe" endpoint_agent.py --install "%TARGET_URL%"
+    ) else (
+        echo [!] Error: Python was not found in PATH or ..\venv\
+        echo     Please install Python 3.11+ and check 'Add python.exe to PATH'.
+        pause
+        exit /b 1
+    )
+)
 
 echo.
 echo ================================================================
-echo   Installation completed! The agent will auto-start on boot.
+echo   Installation completed with HIGHEST Administrator Privileges!
+echo   The agent is now active and will automatically start on boot.
 echo ================================================================
 echo.
 pause

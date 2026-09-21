@@ -120,7 +120,7 @@ Comparing MiniSOC against the **7 Core Technical Pillars of an Enterprise SIEM**
 - **Private RFC 1918 Filter**: Automatically detects internal/loopback traffic, returning instant LAN classification without wasting external API quota.
 
 ### 5. Proactive Endpoint Defense & SOAR Containment (EDR)
-- **Endpoint-Edge Firewall Drops**: When an analyst or IPS rule blocks an IP, the command is dispatched down to all active endpoint agents, enforcing kernel-level firewall drops (`netsh advfirewall` / `iptables`) on the devices themselves.
+- **Bidirectional Endpoint-Edge Firewall Drops & 1-Click Unblock**: When an analyst or IPS rule blocks an IP, the command is dispatched down to all active endpoint agents, enforcing kernel-level firewall drops (`netsh advfirewall` / `iptables`) on the devices themselves. Blocks can be lifted just as easily with 1-click (`🟢 Unblock IP`) from either the Alerts triage feed or the Network Security Monitoring console, immediately clearing local host firewall rules.
 - **1-Click Host Quarantine with SOC Fail-Safe**: Instantly isolates compromised endpoints from lateral movement and external networks while preserving the SOC management communication channel.
 - **Autonomous Process Termination**: Remote and automated termination of attacker tooling (`mimikatz`, `nc.exe`, `psexec.exe`).
 - **Live NSM Inspection**: Robust IPv4/IPv6 socket inspection detecting inbound port sweeps (T1046) and cleartext protocol exposure (T1040).
@@ -306,11 +306,13 @@ Deploy the agent once on monitored laptops/servers — it automatically runs sil
 
 #### Windows (1-Click or CLI):
 ```powershell
-# Automated 1-Click Install:
+# Automated 1-Click Install (Self-Elevating Admin Rights for Windows Firewall EDR control):
 Double-click agent\install_windows.bat
+# (Prompts for UAC 'Yes' to register with HIGHEST Administrator privileges in Task Scheduler.
+# Automatically connects to the live public MiniSOC server if no custom URL is provided).
 
-# Or run via PowerShell / CMD:
-python agent/endpoint_agent.py --install http://YOUR_SERVER_IP:5000/api/v1/telemetry
+# Or run via elevated PowerShell / CMD:
+python agent/endpoint_agent.py --install https://underfoot-such-italics.ngrok-free.dev/api/v1/telemetry
 
 # Check service status or remove:
 python agent/endpoint_agent.py --status

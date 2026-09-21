@@ -164,6 +164,17 @@
                   🛑 Isolate
                 </button>
                 {% endif %}
+                {% if a.src_ip and a.src_ip != '' and a.src_ip != '-' and a.src_ip != '127.0.0.1' and not a.src_ip.startswith('10.') and not a.src_ip.startswith('192.168.') %}
+                  {% if a.src_ip in blocked_ips %}
+                  <button class="btn btn-outline-success btn-enrich py-0" onclick="event.stopPropagation(); unblockIp('{{ a.src_ip }}')" title="Lift Host Firewall Drop for {{ a.src_ip }}">
+                    🟢 Unblock
+                  </button>
+                  {% else %}
+                  <button class="btn btn-outline-danger btn-enrich py-0" onclick="event.stopPropagation(); blockIp('{{ a.src_ip }}')" title="Enforce Host Firewall Drop for {{ a.src_ip }}">
+                    🚫 Block IP
+                  </button>
+                  {% endif %}
+                {% endif %}
                 {% if a.src_ip and a.src_ip != '' %}
                 <button class="btn btn-outline-info btn-enrich py-0" onclick="event.stopPropagation(); enrichAlert({{ a.id }})" title="Query VirusTotal, AbuseIPDB, OTX, ThreatFox">
                   ⚡ Enrich
@@ -372,6 +383,36 @@ function isolateHost(hostname) {
       location.reload();
     })
     .catch(err => alert('Failed to queue isolation command: ' + err));
+}
+
+function blockIp(ip) {
+  if (!confirm(`Are you sure you want to BLOCK remote IP '${ip}' across all connected endpoints and the central firewall?`)) return;
+  fetch('/api/network/block', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ip: ip})
+  })
+  .then(r => r.json())
+  .then(d => {
+    alert(d.message || `[!] Remediation Dispatched: IP ${ip} blocked on central firewall & pushed to endpoint fleet.`);
+    location.reload();
+  })
+  .catch(err => alert('Failed to block IP: ' + err));
+}
+
+function unblockIp(ip) {
+  if (!confirm(`Are you sure you want to UNBLOCK remote IP '${ip}' across all connected endpoints and the central firewall?`)) return;
+  fetch('/api/network/unblock', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ip: ip})
+  })
+  .then(r => r.json())
+  .then(d => {
+    alert(d.message || `[+] IP ${ip} unblocked on central firewall & unblock command pushed to endpoint fleet.`);
+    location.reload();
+  })
+  .catch(err => alert('Failed to unblock IP: ' + err));
 }
 
 // ── Wazuh-Style Forensic Log Inspector (Evidence 5, 7, 8, 10) ──

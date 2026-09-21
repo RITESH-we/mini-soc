@@ -28,7 +28,10 @@
             <label class="form-label small text-muted">Justification / Threat Intel Reason</label>
             <input type="text" name="reason" class="form-control bg-dark text-light border-secondary" placeholder="Adversary C2 / Port Scan" value="Analyst manual containment block">
           </div>
-          <button type="submit" class="btn btn-danger w-100">Block IP via Firewall (netsh)</button>
+          <div class="d-flex gap-2">
+            <button type="submit" formaction="/network/block" class="btn btn-danger flex-grow-1">🚫 Block IP</button>
+            <button type="submit" formaction="/network/unblock" class="btn btn-success flex-grow-1">🟢 Unblock IP</button>
+          </div>
         </form>
       </div>
     </div>
@@ -119,11 +122,18 @@
           <td class="text-muted small">{{ a.mitre_technique }}</td>
           <td class="small">{{ a.details }}</td>
           <td>
+            {% if a.src_ip in active_blocked %}
+            <form method="POST" action="/network/unblock" style="display:inline;">
+              <input type="hidden" name="ip_address" value="{{ a.src_ip }}">
+              <button class="btn btn-outline-success btn-enrich">🟢 Unblock</button>
+            </form>
+            {% else %}
             <form method="POST" action="/network/block" style="display:inline;">
               <input type="hidden" name="ip_address" value="{{ a.src_ip }}">
               <input type="hidden" name="reason" value="IDS Alert: {{ a.rule_name }}">
-              <button class="btn btn-outline-danger btn-enrich">Block IP</button>
+              <button class="btn btn-outline-danger btn-enrich">🚫 Block IP</button>
             </form>
+            {% endif %}
           </td>
         </tr>
         {% else %}

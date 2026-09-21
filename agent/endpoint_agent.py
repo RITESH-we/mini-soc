@@ -553,25 +553,34 @@ def execute_remediation(action_payload, server_url=None):
     elif action == "block_remote_ip" and target:
         rule_name = f"MiniSOC_EDR_Drop_{target.replace(':', '_')}"
         if system == "Windows":
-            silent_run([
+            r1 = silent_run([
                 "netsh", "advfirewall", "firewall", "add", "rule",
                 f"name={rule_name}", "dir=out", "action=block", f"remoteip={target}"
-            ], capture_output=True)
-            silent_run([
+            ], capture_output=True, text=True)
+            r2 = silent_run([
                 "netsh", "advfirewall", "firewall", "add", "rule",
                 f"name={rule_name}_in", "dir=in", "action=block", f"remoteip={target}"
-            ], capture_output=True)
+            ], capture_output=True, text=True)
+            if r1.returncode != 0:
+                err_msg = (r1.stderr or r1.stdout or "Elevation required").strip()
+                log_msg(f"[-] Active Defense Error: Failed to add Windows Firewall rule for {target}: {err_msg}")
+                return f"Firewall error: {err_msg}"
         elif system == "Linux":
-            silent_run(["iptables", "-A", "OUTPUT", "-d", target, "-j", "DROP"], capture_output=True)
-            silent_run(["iptables", "-A", "INPUT", "-s", target, "-j", "DROP"], capture_output=True)
+            r1 = silent_run(["iptables", "-A", "OUTPUT", "-d", target, "-j", "DROP"], capture_output=True, text=True)
+            r2 = silent_run(["iptables", "-A", "INPUT", "-s", target, "-j", "DROP"], capture_output=True, text=True)
+            if r1.returncode != 0:
+                log_msg(f"[-] Active Defense Error: iptables returned {r1.returncode}")
+                return "iptables error"
         log_msg(f"[!] Active Defense: Remote IP {target} dropped on local firewall by MiniSOC EDR.")
         return f"IP {target} blocked locally"
 
     elif action == "unblock_remote_ip" and target:
         rule_name = f"MiniSOC_EDR_Drop_{target.replace(':', '_')}"
         if system == "Windows":
-            silent_run(["netsh", "advfirewall", "firewall", "delete", "rule", f"name={rule_name}"], capture_output=True)
-            silent_run(["netsh", "advfirewall", "firewall", "delete", "rule", f"name={rule_name}_in"], capture_output=True)
+            r1 = silent_run(["netsh", "advfirewall", "firewall", "delete", "rule", f"name={rule_name}"], capture_output=True, text=True)
+            r2 = silent_run(["netsh", "advfirewall", "firewall", "delete", "rule", f"name={rule_name}_in"], capture_output=True, text=True)
+            if r1.returncode != 0:
+                log_msg(f"[-] Active Defense Note: Rule for {target} not found or error: {(r1.stderr or '').strip()}")
         elif system == "Linux":
             silent_run(["iptables", "-D", "OUTPUT", "-d", target, "-j", "DROP"], capture_output=True)
             silent_run(["iptables", "-D", "INPUT", "-s", target, "-j", "DROP"], capture_output=True)
