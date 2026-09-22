@@ -315,8 +315,17 @@ function quickEscalate(alertId, btn) {
 function updateRealtimeMetrics(manual = false) {
   const badge = document.getElementById('realtime-badge');
   fetch('/api/live/metrics')
-    .then(r => r.json())
+    .then(r => {
+      if (r.status === 401) {
+        // Session expired — redirect to login
+        if (badge) badge.innerHTML = `<span class="text-danger">⚠ Session Expired — Redirecting...</span>`;
+        setTimeout(() => { window.location.href = '/login?next=/'; }, 1500);
+        return null;
+      }
+      return r.json();
+    })
     .then(d => {
+      if (!d) return;
       if (document.getElementById('metric-critical-high')) document.getElementById('metric-critical-high').textContent = d.critical_high;
       if (document.getElementById('metric-open-alerts')) document.getElementById('metric-open-alerts').textContent = d.open_alerts;
       if (document.getElementById('metric-fleet-health')) document.getElementById('metric-fleet-health').textContent = `${d.online_endpoints} / ${d.total_endpoints}`;

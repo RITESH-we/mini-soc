@@ -4,7 +4,7 @@ if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
 
 from flask import Flask, render_template, jsonify, request, redirect, url_for, send_file, Response, session
-from database.models import get_conn, init_db
+from database.models import get_conn, init_db, check_password, hash_password
 from datetime import datetime
 from reports.ir_generator import generate_pdf_report
 from network.ips_responder import block_ip, unblock_ip, list_blocked_ips
@@ -33,7 +33,7 @@ def auth_gatekeeper():
         return None
     if 'user' not in session:
         if request.path.startswith('/api/'):
-            return jsonify({'error': 'Authentication required. Please authenticate at /login'}), 401
+            return jsonify({'error': 'Authentication required', 'session_expired': True}), 401
         return redirect(url_for('login_view', next=request.path))
 
 @app.route('/login', methods=['GET', 'POST'])
@@ -45,8 +45,13 @@ def login_view():
         password = (request.form.get('password') or '').strip()
         conn = get_conn()
         try:
-            user = conn.execute("SELECT * FROM users WHERE LOWER(username)=? AND password=?", (username, password)).fetchone()
-            if user:
+            user = conn.execute("SELECT * FROM users WHERE LOWER(username)=?", (username,)).fetchone()
+            if user and check_password(password, user['password']):
+                # Auto-rehash plaintext passwords on first successful login
+                if len(user['password']) != 64:
+                    conn.execute("UPDATE users SET password=? WHERE id=?",
+                                 (hash_password(password), user['id']))
+                    conn.commit()
                 session['user'] = user['username']
                 session['role'] = user['role']
                 session['display_name'] = user['display_name'] or user['username']

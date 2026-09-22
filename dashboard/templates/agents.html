@@ -331,6 +331,15 @@ function restoreHost(hostname) {
 }
 
 function setEndpointProfile(hostname, profile) {
+  const profileLabels = {
+    'standard_workstation': '🖥️ Standard Workstation (15s heartbeat)',
+    'high_security_server': '🛡️ High Security Server (5s heartbeat, strict)',
+    'audit_friend': '🤝 Friend / Safe Mode (audit only, no auto-drops)'
+  };
+  const label = profileLabels[profile] || profile;
+  if (!confirm(`Change policy profile for '${hostname}'?\n\nNew Profile: ${label}\n\nThe agent will adopt this profile on its next heartbeat.`)) {
+    return;
+  }
   fetch(`/api/agents/${encodeURIComponent(hostname)}/profile`, {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
@@ -339,7 +348,6 @@ function setEndpointProfile(hostname, profile) {
   .then(r => r.json())
   .then(d => {
     if (d.success) {
-      alert(`[+] Policy Profile Updated!\n\nHost: ${hostname}\nNew Profile: ${profile}\n\nThe agent will adopt this policy profile on its next heartbeat.`);
       location.reload();
     } else {
       alert(`Failed to update profile: ${d.error || 'Unknown error'}`);

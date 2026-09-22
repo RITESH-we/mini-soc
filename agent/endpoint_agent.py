@@ -89,16 +89,30 @@ def normalize_profile(p: str) -> str:
         return 'audit_friend'
     return 'standard_workstation'
 
+def _load_persisted_profile() -> str:
+    """Read the last-known profile from STATE_FILE so restarts are non-disruptive."""
+    try:
+        state = load_agent_state()
+        return state.get('profile', 'standard_workstation')
+    except Exception:
+        return 'standard_workstation'
+
 def sync_profile(new_p: str):
     global CURRENT_PROFILE, CURRENT_INTERVAL
     norm = normalize_profile(new_p)
-    if norm != CURRENT_PROFILE:
-        CURRENT_PROFILE = norm
-        if CURRENT_PROFILE == "high_security_server":
-            CURRENT_INTERVAL = 5
-        else:
-            CURRENT_INTERVAL = 15
+    changed = (norm != CURRENT_PROFILE)
+    CURRENT_PROFILE = norm
+    CURRENT_INTERVAL = 5 if CURRENT_PROFILE == "high_security_server" else 15
+    if changed:
         log_msg(f"[!] Policy Profile synced from SOC console: {CURRENT_PROFILE} (Heartbeat: {CURRENT_INTERVAL}s)")
+    # Always persist — ensures restarts pick up the correct profile
+    try:
+        state = load_agent_state()
+        state['profile'] = CURRENT_PROFILE
+        save_agent_state(state)
+    except Exception:
+        pass
+
 
 def normalize_server_url(url: str) -> str:
     url = url.strip()
@@ -570,6 +584,13 @@ def execute_remediation(action_payload, server_url=None):
         sync_profile(action_payload.get("profile"))
         return f"Profile updated to {CURRENT_PROFILE}"
 
+    # ── audit_friend safe-mode: suppress disruptive automated actions ──────────
+    DISRUPTIVE_ACTIONS = {"kill_process", "block_remote_ip"}
+    if CURRENT_PROFILE == "audit_friend" and action in DISRUPTIVE_ACTIONS:
+        log_msg(f"[*] audit_friend mode: suppressed automated '{action}' on {target}. "
+                f"Manual operator commands (isolate, unblock) still execute normally.")
+        return f"Suppressed (audit_friend mode): {action} on {target}"
+
     elif action == "kill_process" and target:
         if system == "Windows":
             silent_run(["taskkill", "/F", "/PID", str(target)], capture_output=True)
@@ -710,13 +731,15 @@ def send_telemetry(server_url):
 
 def run_agent(server_url=DEFAULT_SERVER, interval=None, profile="standard_workstation"):
     global CURRENT_PROFILE, CURRENT_INTERVAL
-    CURRENT_PROFILE = normalize_profile(profile)
-    if CURRENT_PROFILE == "high_security_server":
-        CURRENT_INTERVAL = 5
-    elif interval is not None:
-        CURRENT_INTERVAL = interval
+    # If no explicit profile passed (default), restore last-known profile from disk
+    explicit_profile = normalize_profile(profile)
+    persisted = _load_persisted_profile()
+    if explicit_profile == 'standard_workstation' and persisted != 'standard_workstation':
+        CURRENT_PROFILE = persisted
+        log_msg(f"[*] Restored persisted profile from last session: {CURRENT_PROFILE}")
     else:
-        CURRENT_INTERVAL = 15
+        CURRENT_PROFILE = explicit_profile
+    CURRENT_INTERVAL = 5 if CURRENT_PROFILE == "high_security_server" else (interval if interval is not None else 15)
 
     server_url = normalize_server_url(server_url)
     log_msg("=" * 60)

@@ -1,7 +1,21 @@
-import sqlite3, os
+import sqlite3, os, hashlib, hmac
 
 DB_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'minisoc.db')
 SCHEMA  = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'schema.sql')
+
+# ── Password Hashing ──────────────────────────────────────────
+_HASH_PREFIX = "minisoc2026:"  # cheap static salt prefix
+
+def hash_password(plain: str) -> str:
+    """Return a hex SHA-256 digest of (prefix + plain).  Not bcrypt but no extra deps."""
+    return hashlib.sha256((_HASH_PREFIX + plain).encode()).hexdigest()
+
+def check_password(plain: str, stored: str) -> bool:
+    """Constant-time comparison of a plaintext attempt against a stored hash."""
+    candidate = hash_password(plain)
+    # Also accept legacy plaintext passwords so existing installations keep working
+    # until migrated (they'll be hashed on next successful login — see app.py login route)
+    return hmac.compare_digest(candidate, stored) or hmac.compare_digest(plain, stored)
 
 def get_conn():
     conn = sqlite3.connect(DB_PATH, timeout=15.0, check_same_thread=False)
@@ -46,12 +60,24 @@ def init_db():
         user_count = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
         if user_count == 0:
             default_users = [
-                ('admin', 'minisoc@admin', 'admin', 'SOC Administrator'),
-                ('analyst', 'minisoc@analyst', 'analyst', 'Tier 1/2 Analyst'),
-                ('rites', 'password123', 'admin', 'Ritesh (Lead SecOps)')
+                ('admin',   hash_password('minisoc@admin'),  'admin',   'SOC Administrator'),
+                ('analyst', hash_password('minisoc@analyst'), 'analyst', 'Tier 1/2 Analyst'),
+                ('rites',   hash_password('password123'),    'admin',   'Ritesh (Lead SecOps)')
             ]
             conn.executemany("INSERT INTO users (username, password, role, display_name) VALUES (?, ?, ?, ?)", default_users)
             conn.commit()
+    except Exception:
+        pass
+
+    # Migrate existing plaintext passwords to hashes (runs once per user)
+    try:
+        users = conn.execute("SELECT id, password FROM users").fetchall()
+        for u in users:
+            pw = u['password']
+            # A SHA-256 hex digest is exactly 64 chars; shorter = plaintext
+            if len(pw) != 64:
+                conn.execute("UPDATE users SET password=? WHERE id=?", (hash_password(pw), u['id']))
+        conn.commit()
     except Exception:
         pass
 
