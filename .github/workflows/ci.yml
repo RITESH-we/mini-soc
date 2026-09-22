@@ -1,0 +1,131 @@
+name: MiniSOC CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  test:
+    name: "Validate & Smoke Test"
+    runs-on: ubuntu-latest
+
+    steps:
+      # ── Checkout ─────────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ── Python setup ─────────────────────────────────────────
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      # ── Install dependencies ──────────────────────────────────
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      # ── Syntax check all Python files ────────────────────────
+      - name: Python syntax check
+        run: |
+          find . -name "*.py" -not -path "./venv/*" | while read f; do
+            python -m py_compile "$f" && echo "  OK: $f"
+          done
+
+      # ── Database initialization ───────────────────────────────
+      - name: Initialize database
+        run: python -c "import sys, os; sys.path.insert(0, os.getcwd()); from database.models import init_db; init_db()"
+
+      # ── Password hashing unit test ────────────────────────────
+      - name: Test password hashing
+        run: |
+          python -c "
+          import sys, os
+          sys.path.insert(0, os.getcwd())
+          from database.models import hash_password, check_password
+
+          # Correct password must pass
+          h = hash_password('minisoc@admin')
+          assert check_password('minisoc@admin', h), 'FAIL: correct password rejected'
+
+          # Wrong password must fail
+          assert not check_password('wrongpassword', h), 'FAIL: wrong password accepted'
+
+          # Legacy plaintext migration — check_password accepts plaintext too
+          assert check_password('plaintext', 'plaintext'), 'FAIL: plaintext migration check'
+
+          # Hash is always 64 chars
+          assert len(h) == 64, f'FAIL: unexpected hash length {len(h)}'
+
+          print('[+] All password hashing tests passed.')
+          "
+
+      # ── Import check for all major modules ───────────────────
+      - name: Import sanity check
+        run: |
+          python -c "
+          import sys, os
+          sys.path.insert(0, os.getcwd())
+          from database.models import get_conn, init_db, hash_password, check_password
+          from network.ips_responder import block_ip, unblock_ip, list_blocked_ips
+          print('[+] All module imports OK.')
+          "
+
+      # ── Flask app import check ────────────────────────────────
+      - name: Flask app import check
+        run: |
+          python -c "
+          import sys, os
+          sys.path.insert(0, os.getcwd())
+          os.environ.setdefault('FLASK_TESTING', '1')
+          # Only import; don't start the server
+          import importlib.util
+          spec = importlib.util.spec_from_file_location('app', 'dashboard/app.py')
+          # We just check it compiles without error
+          with open('dashboard/app.py') as f:
+              compile(f.read(), 'dashboard/app.py', 'exec')
+          print('[+] Flask app compiles cleanly.')
+          "
+
+      # ── Health API smoke test ─────────────────────────────────
+      - name: Health endpoint smoke test
+        run: |
+          # Start Flask in background (non-debug)
+          python dashboard/app.py &
+          SERVER_PID=$!
+          sleep 4
+
+          # Hit /health
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:5000/health)
+          if [ "$STATUS" = "200" ]; then
+            echo "[+] /health returned 200 OK"
+          else
+            echo "[-] /health returned $STATUS — FAIL"
+            kill $SERVER_PID
+            exit 1
+          fi
+
+          # Unauthenticated /api/live/metrics must return 401
+          METRICS_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:5000/api/live/metrics)
+          if [ "$METRICS_STATUS" = "401" ]; then
+            echo "[+] /api/live/metrics returns 401 for unauthenticated requests (correct)"
+          else
+            echo "[-] /api/live/metrics returned $METRICS_STATUS — expected 401"
+            kill $SERVER_PID
+            exit 1
+          fi
+
+          # /login page must return 200
+          LOGIN_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:5000/login)
+          if [ "$LOGIN_STATUS" = "200" ]; then
+            echo "[+] /login returns 200 OK"
+          else
+            echo "[-] /login returned $LOGIN_STATUS — FAIL"
+            kill $SERVER_PID
+            exit 1
+          fi
+
+          kill $SERVER_PID
+          echo "[+] All smoke tests passed."
