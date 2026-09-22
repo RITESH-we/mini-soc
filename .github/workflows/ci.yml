@@ -89,13 +89,29 @@ jobs:
           print('[+] Flask app compiles cleanly.')
           "
 
-      # ── Health API smoke test ─────────────────────────────────
+      # ── Health API smoke test ─────────────────────────────────────
       - name: Health endpoint smoke test
         run: |
-          # Start Flask in background (non-debug)
-          python dashboard/app.py &
+          # Start Flask in background, capturing output
+          python dashboard/app.py > /tmp/flask_stdout.log 2> /tmp/flask_stderr.log &
           SERVER_PID=$!
-          sleep 4
+          
+          # Wait up to 15s for Flask to bind to port 5000
+          for i in $(seq 1 15); do
+            sleep 1
+            if curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:5000/health | grep -q "200"; then
+              echo "[+] Flask started after ${i}s"
+              break
+            fi
+            if [ $i -eq 15 ]; then
+              echo "[-] Flask did not start within 15s. stdout:"
+              cat /tmp/flask_stdout.log
+              echo "stderr:"
+              cat /tmp/flask_stderr.log
+              kill $SERVER_PID 2>/dev/null
+              exit 1
+            fi
+          done
 
           # Hit /health
           STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:5000/health)
