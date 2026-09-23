@@ -75,46 +75,6 @@ jobs:
 
       # ── Flask route smoke test (test client — no port binding) ───
       - name: Flask route smoke test
-        run: |
-          python -c "
-          import sys, os
-          sys.path.insert(0, os.getcwd())
+        run: python scripts/ci_smoke_test.py
 
-          # Load app module
-          import importlib.util
-          spec = importlib.util.spec_from_file_location('app', 'dashboard/app.py')
-          mod = importlib.util.module_from_spec(spec)
-          sys.modules['app'] = mod
-          spec.loader.exec_module(mod)
-
-          app = mod.app
-          app.config['TESTING'] = True
-
-          with app.test_client() as client:
-              # /health must return 200
-              r = client.get('/health')
-              assert r.status_code == 200, f'/health returned {r.status_code}'
-              print('[+] /health -> 200 OK')
-
-              # /login must return 200 (no session needed)
-              r = client.get('/login')
-              assert r.status_code == 200, f'/login returned {r.status_code}'
-              print('[+] /login -> 200 OK')
-
-              # /api/live/metrics must return 401 without a session
-              r = client.get('/api/live/metrics')
-              assert r.status_code == 401, f'/api/live/metrics returned {r.status_code} (expected 401)'
-              import json
-              data = json.loads(r.data)
-              assert data.get('session_expired') == True, 'session_expired flag missing from 401 response'
-              print('[+] /api/live/metrics -> 401 with session_expired flag (correct)')
-
-              # Test login with valid credentials
-              r = client.post('/login', data={'username': 'admin', 'password': 'minisoc@admin', 'next': '/'}, follow_redirects=False)
-              assert r.status_code in (302, 200), f'login POST returned {r.status_code}'
-              print(f'[+] POST /login (admin) -> {r.status_code} (redirect/success)')
-
-              print()
-              print('[+] All Flask route smoke tests passed.')
-          "
 
