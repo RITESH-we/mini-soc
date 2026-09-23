@@ -14,8 +14,15 @@ from detectors.ueba_engine import calculate_entity_risk, get_top_risky_entities
 from collectors.unified_parser import parse_windows_event_xml, parse_linux_auth_log_line
 
 CONFIG_PATH = os.path.join(BASE_DIR, 'config.yaml')
-with open(CONFIG_PATH, 'r', encoding='utf-8') as f:
-    config = yaml.safe_load(f)
+if os.path.exists(CONFIG_PATH):
+    with open(CONFIG_PATH, 'r', encoding='utf-8') as f:
+        config = yaml.safe_load(f) or {}
+else:
+    # CI / fresh-clone fallback — safe defaults, no secrets exposed
+    config = {
+        'secret_key': os.environ.get('MINISOC_SECRET_KEY', 'minisoc-ci-fallback-key-changeme'),
+        'dashboard': {'host': '0.0.0.0', 'port': 5000, 'debug': False},
+    }
 
 app = Flask(__name__)
 app.secret_key = config.get('secret_key', 'minisoc-enterprise-secret-key-2026-auth')

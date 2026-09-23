@@ -1,20 +1,23 @@
-﻿# ============================================================
-# config.example.yaml — Copy this to config.yaml and fill keys
-# ============================================================
+# MiniSOC Enterprise — Configuration Template
+# Copy this file to config.yaml and fill in your values.
+# config.yaml is gitignored (never committed) to protect secrets.
 
-api_keys:
-  virustotal: YOUR_VT_KEY_HERE
-  abuseipdb:  YOUR_ABUSEIPDB_KEY_HERE
-
-detection:
-  brute_force_threshold: 5
-  brute_force_window_sec: 60
+# Flask session secret key — change this to a long random string in production
+secret_key: "CHANGE_ME_use_a_long_random_string_here"
 
 dashboard:
-  host: 127.0.0.1
+  host: "0.0.0.0"
   port: 5000
-  debug: true
+  debug: false          # set true only during local development
 
-logging:
-  level: INFO
-  file: minisoc.log
+# Optional: Threat Intelligence API keys
+# Leave blank to disable that feed (the SOC will still work without them)
+threat_intel:
+  virustotal_api_key: ""
+  abuseipdb_api_key: ""
+  threatfox_api_key: ""
+  otx_api_key: ""
+
+# Optional: Gemini AI key for Nova analyst
+ai:
+  gemini_api_key: ""
