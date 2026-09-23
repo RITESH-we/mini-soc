@@ -639,7 +639,7 @@ def receive_telemetry():
     conn = get_conn()
     try:
         # 1. Check for pending SOAR containment / defense commands for this endpoint
-        ep_row = conn.execute("SELECT pending_command, status FROM endpoints WHERE hostname=?", (hostname,)).fetchone()
+        ep_row = conn.execute("SELECT pending_command, status, profile FROM endpoints WHERE hostname=?", (hostname,)).fetchone()
         cmd_to_send = None
         if ep_row and ep_row['pending_command']:
             raw_cmd = ep_row['pending_command']
@@ -655,7 +655,7 @@ def receive_telemetry():
         # Update or insert endpoint record
         current_status = ep_row['status'] if ep_row else 'ONLINE'
         agent_profile = data.get('profile') or 'standard_workstation'
-        active_profile = (ep_row['profile'] if (ep_row and ep_row['profile']) else agent_profile)
+        active_profile = ep_row['profile'] if (ep_row and 'profile' in ep_row.keys() and ep_row['profile']) else agent_profile
         conn.execute("""
             INSERT INTO endpoints (hostname, ip_address, os, architecture, agent_version, last_heartbeat, status, profile)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -664,7 +664,8 @@ def receive_telemetry():
                 os=excluded.os,
                 architecture=excluded.architecture,
                 agent_version=excluded.agent_version,
-                last_heartbeat=excluded.last_heartbeat
+                last_heartbeat=excluded.last_heartbeat,
+                profile=COALESCE(endpoints.profile, excluded.profile)
         """, (hostname, ip_addr, os_name, arch, ver, now_iso, current_status, active_profile))
 
         # Store security posture telemetry if provided
