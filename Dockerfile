@@ -25,9 +25,9 @@ COPY . .
 # Expose SIEM UI and API ingestion port
 EXPOSE 5000
 
-# Healthcheck for container orchestration (Kubernetes, AWS ECS, GCP Cloud Run)
+# Healthcheck for container orchestration (Kubernetes, AWS ECS, GCP Cloud Run, Render)
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:5000/api/stats || exit 1
+    CMD curl -f http://localhost:${PORT:-5000}/health || exit 1
 
 # Launch Flask application
 CMD ["python", "dashboard/app.py"]
