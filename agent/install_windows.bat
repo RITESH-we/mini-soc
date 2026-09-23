@@ -19,7 +19,7 @@ cd /d "%~dp0"
 :: 2. Target SOC server URL (default to live public domain if none provided)
 set TARGET_URL=%1
 if "%TARGET_URL%"=="" (
-    set TARGET_URL=https://underfoot-such-italics.ngrok-free.dev/api/v1/telemetry
+    set TARGET_URL=https://trishula-soc.onrender.com/api/v1/telemetry
 )
 
 :: 3. Select Security Policy Profile

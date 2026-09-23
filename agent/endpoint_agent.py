@@ -74,8 +74,8 @@ def silent_popen(cmd, **kwargs):
             kwargs.setdefault(k, v)
     return subprocess.Popen(cmd, **kwargs)
 
-# Live public ngrok server endpoint by default
-DEFAULT_SERVER = "https://underfoot-such-italics.ngrok-free.dev/api/v1/telemetry"
+# Live public 24/7 cloud server endpoint by default
+DEFAULT_SERVER = "https://trishula-soc.onrender.com/api/v1/telemetry"
 AGENT_VERSION = "2.2.0"
 STATE_FILE = os.path.join(tempfile.gettempdir(), "minisoc_agent_state.json")
 

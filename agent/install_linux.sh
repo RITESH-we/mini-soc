@@ -8,7 +8,7 @@ echo "================================================================"
 echo ""
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-TARGET_SERVER="${1:-https://underfoot-such-italics.ngrok-free.dev/api/v1/telemetry}"
+TARGET_SERVER="${1:-https://trishula-soc.onrender.com/api/v1/telemetry}"
 
 if [ "$EUID" -ne 0 ]; then
   echo "[-] Please run as root: sudo bash install_linux.sh"
