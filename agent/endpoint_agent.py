@@ -12,6 +12,8 @@ import urllib.error
 import tempfile
 import re
 import xml.etree.ElementTree as ET
+import base64
+import csv
 
 # Prevent console window flash/popups when running under pythonw or background tasks on Windows
 if sys.stdout is None:
@@ -156,6 +158,172 @@ def get_system_info():
         "timestamp": datetime.now().isoformat()
     }
 
+def deobfuscate_powershell_cmd(cmdline: str) -> str:
+    """Detects Base64 encoded PowerShell scripts (-enc / -encodedcommand) and decodes UTF-16LE payload."""
+    if not cmdline:
+        return ""
+    m = re.search(r'(?:-|/)(?:e|enc|encodedcommand)\s+([A-Za-z0-9+/=]{8,})', cmdline, re.IGNORECASE)
+    if m:
+        b64_str = m.group(1)
+        try:
+            raw = base64.b64decode(b64_str)
+            decoded = raw.decode('utf-16le', errors='ignore').strip()
+            if decoded:
+                return decoded
+        except Exception:
+            pass
+    return ""
+
+# Honey-Token Canary Trap definition
+CANARY_FILE = os.path.join(tempfile.gettempdir(), "minisoc_vault_creds.db")
+CANARY_CONTENT = b"# MiniSOC Security Canary Vault -- DO NOT EDIT\n[vault]\nmaster_key_hash=9f83acde923b0918\n"
+CANARY_EXPECTED_SIZE = len(CANARY_CONTENT)
+
+def ensure_canary_trap():
+    """Plants a honey-token credential file to detect credential stealers and unauthorized tampering."""
+    try:
+        if not os.path.exists(CANARY_FILE):
+            with open(CANARY_FILE, "wb") as f:
+                f.write(CANARY_CONTENT)
+    except Exception:
+        pass
+
+def check_canary_trap() -> dict:
+    """Monitors the honey-token canary file. Any modification or deletion fires a critical alert."""
+    ensure_canary_trap()
+    try:
+        if not os.path.exists(CANARY_FILE):
+            ensure_canary_trap()
+            return {
+                "event_id": 9991,
+                "record_id": int(time.time()),
+                "channel": "MiniSOC-Canary",
+                "timestamp": datetime.now().isoformat(),
+                "rule_name": "Canary Honey-File Trap Tripped (Deletion/Tampering)",
+                "severity": "CRITICAL",
+                "mitre_tactic": "Credential Access",
+                "mitre_technique": "T1081 - Credentials in Files",
+                "user": "SYSTEM",
+                "domain": "LOCAL",
+                "src_ip": "127.0.0.1",
+                "process": "unknown",
+                "command_line": "",
+                "details": f"CRITICAL DECEPTION ALERT: Honey-token canary '{CANARY_FILE}' was deleted or moved! Active credential theft / ransomware activity suspected.",
+                "raw_fields": {"canary_file": CANARY_FILE}
+            }
+        stat = os.stat(CANARY_FILE)
+        if stat.st_size != CANARY_EXPECTED_SIZE and stat.st_size > 0:
+            return {
+                "event_id": 9992,
+                "record_id": int(time.time()),
+                "channel": "MiniSOC-Canary",
+                "timestamp": datetime.now().isoformat(),
+                "rule_name": "Canary Honey-File Tampering Detected",
+                "severity": "CRITICAL",
+                "mitre_tactic": "Credential Access",
+                "mitre_technique": "T1081 - Credentials in Files",
+                "user": "SYSTEM",
+                "domain": "LOCAL",
+                "src_ip": "127.0.0.1",
+                "process": "unknown",
+                "command_line": "",
+                "details": f"CRITICAL DECEPTION ALERT: Honey-token canary '{CANARY_FILE}' was modified (size {stat.st_size} bytes, expected {CANARY_EXPECTED_SIZE}).",
+                "raw_fields": {"canary_file": CANARY_FILE}
+            }
+    except Exception:
+        pass
+    return None
+
+
+def check_persistence_registry() -> list:
+    """Monitors Windows Run Keys for unauthorized startup persistence (T1547.001)."""
+    if platform.system() != "Windows":
+        return []
+    alerts = []
+    state = load_agent_state()
+    known_entries = set(state.get("known_run_keys", []))
+    current_entries = []
+
+    try:
+        ps_cmd = "Get-ItemProperty 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run', 'HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run' -ErrorAction SilentlyContinue | Select-Object -Property * -ExcludeProperty PS*, Item* | ConvertTo-Json"
+        out = silent_check_output(["powershell", "-NoProfile", "-NonInteractive", "-Command", ps_cmd], stderr=subprocess.DEVNULL, universal_newlines=True, timeout=5)
+        if out and out.strip():
+            data = json.loads(out)
+            items = data if isinstance(data, list) else [data]
+            for block in items:
+                if isinstance(block, dict):
+                    for k, v in block.items():
+                        if k and v and isinstance(v, str):
+                            entry_sig = f"{k}={v}"
+                            current_entries.append(entry_sig)
+                            if known_entries and entry_sig not in known_entries:
+                                alerts.append({
+                                    "event_id": 9993,
+                                    "record_id": int(time.time()),
+                                    "channel": "MiniSOC-Persistence",
+                                    "timestamp": datetime.now().isoformat(),
+                                    "rule_name": "Rogue Persistence: Registry Run Key Added",
+                                    "severity": "HIGH",
+                                    "mitre_tactic": "Persistence",
+                                    "mitre_technique": "T1547.001 - Registry Run Keys / Startup Folder",
+                                    "user": "LOCAL",
+                                    "domain": "LOCAL",
+                                    "src_ip": "127.0.0.1",
+                                    "process": "registry",
+                                    "command_line": str(v)[:200],
+                                    "details": f"New persistence entry added to Windows Run Key: '{k}' -> '{v}'",
+                                    "raw_fields": {"key": k, "target": v}
+                                })
+            state["known_run_keys"] = current_entries
+            save_agent_state(state)
+    except Exception:
+        pass
+    return alerts
+
+def check_usb_devices() -> list:
+    """Detects newly attached USB mass storage / BadUSB devices (T1091)."""
+    if platform.system() != "Windows":
+        return []
+    alerts = []
+    state = load_agent_state()
+    known_usb = set(state.get("known_usb_devices", []))
+    current_usb = []
+
+    try:
+        ps_cmd = "Get-CimInstance Win32_DiskDrive | Where-Object { $_.InterfaceType -eq 'USB' } | Select-Object -Property DeviceID, Model, Size | ConvertTo-Json"
+        out = silent_check_output(["powershell", "-NoProfile", "-NonInteractive", "-Command", ps_cmd], stderr=subprocess.DEVNULL, universal_newlines=True, timeout=4)
+        if out and out.strip():
+            data = json.loads(out)
+            items = data if isinstance(data, list) else [data]
+            for item in items:
+                if isinstance(item, dict):
+                    dev_id = item.get("DeviceID") or item.get("Model")
+                    if dev_id:
+                        current_usb.append(dev_id)
+                        if known_usb and dev_id not in known_usb:
+                            alerts.append({
+                                "event_id": 9994,
+                                "record_id": int(time.time()),
+                                "channel": "MiniSOC-USB",
+                                "timestamp": datetime.now().isoformat(),
+                                "rule_name": "Removable USB Drive Attached (Physical Access)",
+                                "severity": "MEDIUM",
+                                "mitre_tactic": "Initial Access",
+                                "mitre_technique": "T1091 - Replication Through Removable Media",
+                                "user": "LOCAL",
+                                "domain": "LOCAL",
+                                "src_ip": "127.0.0.1",
+                                "process": "kernel",
+                                "command_line": "",
+                                "details": f"New USB storage device connected: Model '{item.get('Model')}' (DeviceID: {dev_id})",
+                                "raw_fields": item
+                            })
+            state["known_usb_devices"] = current_usb
+            save_agent_state(state)
+    except Exception:
+        pass
+    return alerts
+
 def get_active_connections():
     connections = []
     try:
@@ -184,52 +352,86 @@ def get_active_connections():
                     })
     except Exception as e:
         connections.append({"error": str(e)})
-    return connections[:50]
+    return connections[:150]
 
 def get_top_processes():
+    """
+    Extracts deep process telemetry including executable path, parent process (PPID),
+    and command-line arguments to defeat process masquerading.
+    """
     procs = []
-    try:
-        if platform.system() == "Windows":
-            cmd = ["tasklist", "/FO", "CSV", "/NH"]
-            output = silent_check_output(cmd, stderr=subprocess.DEVNULL, universal_newlines=True)
-            for line in output.splitlines():
-                if line.strip():
-                    cols = [c.strip('"') for c in line.split('","')]
-                    if len(cols) >= 5:
+    if platform.system() == "Windows":
+        try:
+            ps_cmd = (
+                "Get-CimInstance Win32_Process | Select-Object -First 100 ProcessId, ParentProcessId, Name, ExecutablePath, CommandLine, "
+                "@{N='MemoryMB';E={[math]::Round($_.WorkingSetSize/1MB,1)}} | ConvertTo-Csv -NoTypeInformation"
+            )
+            out = silent_check_output(["powershell", "-NoProfile", "-NonInteractive", "-Command", ps_cmd], stderr=subprocess.DEVNULL, universal_newlines=True, timeout=5)
+            lines = [l.strip() for l in out.splitlines() if l.strip()]
+            if len(lines) > 1:
+                reader = csv.DictReader(lines)
+                for row in reader:
+                    name = row.get("Name") or ""
+                    if name:
                         procs.append({
-                            "name": cols[0],
-                            "pid": cols[1],
-                            "session": cols[2],
-                            "mem_usage": cols[4]
+                            "name": name,
+                            "pid": row.get("ProcessId") or "-",
+                            "ppid": row.get("ParentProcessId") or "-",
+                            "executable_path": row.get("ExecutablePath") or "",
+                            "command_line": (row.get("CommandLine") or "")[:400],
+                            "mem_usage": f"{row.get('MemoryMB', '0')} MB"
                         })
-        else:
-            try:
-                cmd = ["ps", "-eo", "pid,user,%cpu,%mem,comm", "--sort=-%mem"]
+        except Exception:
+            pass
+
+    if not procs:
+        try:
+            if platform.system() == "Windows":
+                cmd = ["tasklist", "/FO", "CSV", "/NH"]
                 output = silent_check_output(cmd, stderr=subprocess.DEVNULL, universal_newlines=True)
-                for line in output.splitlines()[1:30]:
-                    parts = line.split()
-                    if len(parts) >= 5:
-                        procs.append({
-                            "pid": parts[0],
-                            "user": parts[1],
-                            "cpu": parts[2],
-                            "mem": parts[3],
-                            "name": parts[4]
-                        })
-            except Exception:
-                # Android / BusyBox fallback
-                cmd = ["ps"]
-                output = silent_check_output(cmd, stderr=subprocess.DEVNULL, universal_newlines=True)
-                for line in output.splitlines()[1:30]:
-                    parts = line.split()
-                    if len(parts) >= 4:
-                        procs.append({
-                            "pid": parts[0] if parts[0].isdigit() else (parts[1] if len(parts)>1 and parts[1].isdigit() else "-"),
-                            "name": parts[-1]
-                        })
-    except Exception as e:
-        procs.append({"error": str(e)})
-    return procs[:30]
+                for line in output.splitlines():
+                    if line.strip():
+                        cols = [c.strip('"') for c in line.split('","')]
+                        if len(cols) >= 5:
+                            procs.append({
+                                "name": cols[0],
+                                "pid": cols[1],
+                                "ppid": "-",
+                                "executable_path": "",
+                                "command_line": "",
+                                "mem_usage": cols[4]
+                            })
+            else:
+                try:
+                    cmd = ["ps", "-eo", "pid,user,%cpu,%mem,comm,args", "--sort=-%mem"]
+                    output = silent_check_output(cmd, stderr=subprocess.DEVNULL, universal_newlines=True)
+                    for line in output.splitlines()[1:100]:
+                        parts = line.split(None, 5)
+                        if len(parts) >= 5:
+                            procs.append({
+                                "pid": parts[0],
+                                "user": parts[1],
+                                "cpu": parts[2],
+                                "mem": parts[3],
+                                "name": parts[4],
+                                "command_line": parts[5][:300] if len(parts) > 5 else parts[4]
+                            })
+                except Exception:
+                    # Android / BusyBox fallback
+                    cmd = ["ps"]
+                    output = silent_check_output(cmd, stderr=subprocess.DEVNULL, universal_newlines=True)
+                    for line in output.splitlines()[1:100]:
+                        parts = line.split()
+                        if len(parts) >= 4:
+                            procs.append({
+                                "pid": parts[0] if parts[0].isdigit() else (parts[1] if len(parts)>1 and parts[1].isdigit() else "-"),
+                                "name": parts[-1],
+                                "command_line": parts[-1]
+                            })
+        except Exception as e:
+            procs.append({"error": str(e)})
+    return procs[:100]
+
 
 def load_agent_state() -> dict:
     if os.path.exists(STATE_FILE):
@@ -279,7 +481,14 @@ def _parse_xml_event(node) -> dict:
         if src_ip == "-" or src_ip.startswith("::"):
             src_ip = "127.0.0.1"
         process = fields.get("NewProcessName") or fields.get("ProcessName") or fields.get("Image") or ""
-        cmdline = fields.get("CommandLine") or fields.get("ScriptBlockText") or ""
+        raw_cmdline = fields.get("CommandLine") or fields.get("ScriptBlockText") or ""
+        
+        # Transparent Base64 De-obfuscation
+        decoded_script = deobfuscate_powershell_cmd(raw_cmdline)
+        if decoded_script:
+            cmdline = f"{raw_cmdline} [DE-OBFUSCATED]: {decoded_script}"
+        else:
+            cmdline = raw_cmdline
 
         if event_id == 4625:
             rule_name = "Windows Logon Failure"
@@ -306,38 +515,38 @@ def _parse_xml_event(node) -> dict:
             mitre_technique = "T1078.003 - Local Accounts"
             details = f"Special administrative privileges assigned to logon session for '{user}'"
         elif event_id == 4688:
-            # Deep CLI Inspection for Top 5 Attack Signatures
+            # Deep CLI Inspection for Top Attack Signatures (runs against both raw & de-obfuscated payload)
             low_cmd = cmdline.lower()
             if re.search(r"(vssadmin.*delete\s+shadows|wmic.*shadowcopy\s+delete|wbadmin.*delete\s+catalog|bcdedit.*recoveryenabled\s+no|bcdedit.*ignoreallfailures)", low_cmd):
                 rule_name = "Ransomware Recovery Inhibition (Shadow Copy Deletion)"
                 severity = "CRITICAL"
                 mitre_tactic = "Impact"
                 mitre_technique = "T1490 - Inhibit System Recovery"
-                details = f"RANSOMWARE ALERT: Shadow copy destruction command executed: {cmdline[:140]}"
+                details = f"RANSOMWARE ALERT: Shadow copy destruction command executed: {cmdline[:180]}"
             elif re.search(r"(mimikatz|comsvcs\.dll.*minidump|vaultcmd|cmdkey\s+/list|whoami\s+/priv|findstr.*password)", low_cmd):
                 rule_name = "In-Memory Credential Dumping / Snooping"
                 severity = "HIGH"
                 mitre_tactic = "Credential Access"
                 mitre_technique = "T1003.001 - LSASS Memory"
-                details = f"Credential access / dumping command executed: {cmdline[:140]}"
+                details = f"Credential access / dumping command executed: {cmdline[:180]}"
             elif re.search(r"(compress-archive|tar\s+-[a-z]*z|7z\s+a|rar\s+a)", low_cmd):
                 rule_name = "Data Staging for Exfiltration"
                 severity = "HIGH"
                 mitre_tactic = "Collection"
                 mitre_technique = "T1560 - Archive Collected Data"
-                details = f"Data staging archive command executed: {cmdline[:140]}"
-            elif re.search(r"(-enc\s+|-encodedcommand\s+|amsiutils|downloadstring|iex\s*\()", low_cmd):
-                rule_name = "Living-off-the-Land Obfuscated PowerShell"
+                details = f"Data staging archive command executed: {cmdline[:180]}"
+            elif re.search(r"(-enc\s+|-encodedcommand\s+|amsiutils|downloadstring|iex\s*\(|certutil.*urlcache|bitsadmin.*transfer|mshta\s+http|rundll32.*javascript)", low_cmd):
+                rule_name = "Living-off-the-Land Obfuscated Execution / Download Cradle"
                 severity = "HIGH"
                 mitre_tactic = "Execution"
-                mitre_technique = "T1059.001 - PowerShell"
-                details = f"Obfuscated PowerShell execution: {cmdline[:140]}"
+                mitre_technique = "T1059.001 - PowerShell / LOLBins"
+                details = f"Living-off-the-Land attack execution: {cmdline[:180]}"
             else:
                 rule_name = "Process Creation"
                 severity = "LOW"
                 mitre_tactic = "Execution"
                 mitre_technique = "T1059 - Command Execution"
-                details = f"Process spawned: {process} | CLI: {cmdline[:100]}"
+                details = f"Process spawned: {process} | CLI: {cmdline[:120]}"
         elif event_id == 4104:
             low_cmd = cmdline.lower()
             if re.search(r"(-enc\s+|-encodedcommand\s+|amsiutils|downloadstring|iex\s*\(|invoke-expression|bitstransfer|system\.net\.webclient)", low_cmd):
@@ -345,13 +554,13 @@ def _parse_xml_event(node) -> dict:
                 severity = "HIGH"
                 mitre_tactic = "Execution"
                 mitre_technique = "T1059.001 - PowerShell"
-                details = f"Living-off-the-Land script block detected: {cmdline[:140]}"
+                details = f"Living-off-the-Land script block detected: {cmdline[:180]}"
             else:
                 rule_name = "PowerShell Script Block"
                 severity = "MEDIUM"
                 mitre_tactic = "Execution"
                 mitre_technique = "T1059.001 - PowerShell"
-                details = f"PowerShell execution: {cmdline[:120]}"
+                details = f"PowerShell execution: {cmdline[:140]}"
         elif event_id == 4698:
             task_name = fields.get("TaskName", "Unknown")
             rule_name = "Scheduled Task Created"
@@ -359,13 +568,14 @@ def _parse_xml_event(node) -> dict:
             mitre_tactic = "Persistence"
             mitre_technique = "T1053.005 - Scheduled Task"
             details = f"Rogue scheduled task created: '{task_name}' by '{user or fields.get('SubjectUserName', 'SYSTEM')}'"
-        elif event_id == 4697:
+        elif event_id == 4697 or event_id == 7045:
             svc_name = fields.get("ServiceName", "Unknown")
-            rule_name = "System Service Installed"
+            svc_file = fields.get("ImagePath") or fields.get("ServiceFileName", "")
+            rule_name = "New System Service Installed"
             severity = "HIGH"
             mitre_tactic = "Persistence"
             mitre_technique = "T1543.003 - Windows Service"
-            details = f"New system service installed: '{svc_name}' (Image: {fields.get('ServiceFileName', '')})"
+            details = f"New system service installed: '{svc_name}' (Image: {svc_file})"
         elif event_id == 4720:
             rule_name = "User Account Created"
             severity = "HIGH"
@@ -378,12 +588,33 @@ def _parse_xml_event(node) -> dict:
             mitre_tactic = "Privilege Escalation"
             mitre_technique = "T1078 - Valid Accounts"
             details = f"Member '{fields.get('MemberName', '')}' added to group '{user}'"
-        elif event_id == 1102:
-            rule_name = "Windows Audit Log Cleared"
+        elif event_id in (1102, 104):
+            rule_name = "Windows Event Log Cleared"
             severity = "CRITICAL"
             mitre_tactic = "Defense Evasion"
             mitre_technique = "T1070.001 - Clear Windows Event Logs"
-            details = f"Security audit log was wiped/cleared by user '{user or fields.get('SubjectUserName', 'UNKNOWN')}' (Anti-Forensics)"
+            details = f"Security/System audit log wiped/cleared by user '{user or fields.get('SubjectUserName', 'UNKNOWN')}' (Anti-Forensics)"
+        elif event_id == 1116:
+            threat_name = fields.get("Threat Name", "Unknown Threat")
+            threat_path = fields.get("Path", "")
+            rule_name = "Windows Defender Threat Detected"
+            severity = "CRITICAL"
+            mitre_tactic = "Defense Evasion"
+            mitre_technique = "T1204 - User Execution"
+            details = f"Windows Defender detected malware threat '{threat_name}' at path '{threat_path}'"
+        elif event_id == 1117:
+            threat_name = fields.get("Threat Name", "Unknown Threat")
+            rule_name = "Windows Defender Action Taken"
+            severity = "HIGH"
+            mitre_tactic = "Defense Evasion"
+            mitre_technique = "T1204 - User Execution"
+            details = f"Windows Defender neutralized or quarantined threat '{threat_name}'"
+        elif event_id == 5001:
+            rule_name = "Windows Defender Real-Time Protection Disabled"
+            severity = "CRITICAL"
+            mitre_tactic = "Defense Evasion"
+            mitre_technique = "T1562.001 - Disable or Modify Tools"
+            details = "ALERT: Windows Defender real-time protection was disabled! Potential adversary defense tampering."
         else:
             rule_name = f"Security Event {event_id}"
             severity = "LOW"
@@ -408,6 +639,7 @@ def _parse_xml_event(node) -> dict:
             "details": details,
             "raw_fields": fields
         }
+
     except Exception:
         return None
 
@@ -495,12 +727,14 @@ def get_security_audit_events():
     if system == "Windows":
         channels = [
             ("Security", "*[System[(EventID=4624 or EventID=4625 or EventID=4648 or EventID=4672 or EventID=4688 or EventID=4697 or EventID=4698 or EventID=4720 or EventID=4732 or EventID=1102)]]"),
-            ("Microsoft-Windows-PowerShell/Operational", "*[System[(EventID=4104)]]")
+            ("System", "*[System[(EventID=7045 or EventID=104 or EventID=7036)]]"),
+            ("Microsoft-Windows-PowerShell/Operational", "*[System[(EventID=4104)]]"),
+            ("Microsoft-Windows-Windows Defender/Operational", "*[System[(EventID=1116 or EventID=1117 or EventID=5001)]]")
         ]
         
         for chan_name, query in channels:
             try:
-                cmd = ["wevtutil", "qe", chan_name, f"/q:{query}", "/f:xml", "/c:10", "/rd:true"]
+                cmd = ["wevtutil", "qe", chan_name, f"/q:{query}", "/f:xml", "/c:50", "/rd:true"]
                 out = silent_check_output(cmd, stderr=subprocess.DEVNULL, universal_newlines=True)
                 if not out or not out.strip():
                     continue
@@ -519,7 +753,7 @@ def get_security_audit_events():
                             if rec_id > max_rec_in_batch:
                                 max_rec_in_batch = rec_id
                             if last_rec == 0:
-                                if len(batch_events) < 2:
+                                if len(batch_events) < 3:
                                     batch_events.append(parsed)
                             elif rec_id > last_rec:
                                 batch_events.append(parsed)
@@ -530,6 +764,22 @@ def get_security_audit_events():
                 pending_records[chan_name] = max_rec_in_batch
             except Exception:
                 continue
+
+        # ── Deception & Anti-Evasion Probes ────────────────────────
+        # 1. Honey-Token Canary File Trap
+        canary_alert = check_canary_trap()
+        if canary_alert:
+            events.append(canary_alert)
+
+        # 2. Persistence Registry Watcher (Run keys)
+        persist_alerts = check_persistence_registry()
+        if persist_alerts:
+            events.extend(persist_alerts)
+
+        # 3. Removable USB Media Monitor
+        usb_alerts = check_usb_devices()
+        if usb_alerts:
+            events.extend(usb_alerts)
 
     elif system == "Linux":
         auth_file = "/var/log/auth.log" if os.path.exists("/var/log/auth.log") else ("/var/log/secure" if os.path.exists("/var/log/secure") else None)
@@ -573,7 +823,8 @@ def get_security_audit_events():
             except Exception:
                 pass
 
-    return events[:25], pending_state
+    return events[:50], pending_state
+
 
 def execute_remediation(action_payload, server_url=None):
     action = action_payload.get("action")

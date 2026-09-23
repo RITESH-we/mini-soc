@@ -77,4 +77,8 @@ jobs:
       - name: Flask route smoke test
         run: python scripts/ci_smoke_test.py
 
+      # ── Multi-Vector & Anti-Evasion Test Suite ──────────────────
+      - name: Multi-Vector & Anti-Evasion Test Suite
+        run: python scripts/test_anti_evasion.py
+
 

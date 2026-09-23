@@ -62,6 +62,58 @@
   </div>
 </div>
 
+<!-- Advanced Anti-Evasion & Deception Hunting Playbooks -->
+<div class="row g-3 mb-4">
+  <!-- Playbook 5: Process Masquerading -->
+  <div class="col-md-3">
+    <div class="card h-100 border-danger">
+      <div class="card-body">
+        <div class="text-danger small text-uppercase fw-bold mb-1">Playbook #5 • Defense Evasion</div>
+        <h6 class="fw-bold text-light">Process Masquerading</h6>
+        <p class="small text-muted mb-3">Hunts for system binaries (<code>svchost.exe</code>, <code>lsass.exe</code>) executing from user folders or Temp directories.</p>
+        <button class="btn btn-sm btn-outline-danger w-100" onclick="runHunt('masquerading')">Run Hunt Query</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Playbook 6: Persistence -->
+  <div class="col-md-3">
+    <div class="card h-100 border-warning">
+      <div class="card-body">
+        <div class="text-warning small text-uppercase fw-bold mb-1">Playbook #6 • Persistence</div>
+        <h6 class="fw-bold text-light">Autorun &amp; Tasks</h6>
+        <p class="small text-muted mb-3">Finds unauthorized Windows Run keys, startup files, new services (<code>7045</code>), and scheduled tasks (<code>4698</code>).</p>
+        <button class="btn btn-sm btn-outline-warning w-100" onclick="runHunt('persistence')">Run Hunt Query</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Playbook 7: DNS Tunneling -->
+  <div class="col-md-3">
+    <div class="card h-100 border-primary">
+      <div class="card-body">
+        <div class="text-primary small text-uppercase fw-bold mb-1">Playbook #7 • C2 Exfiltration</div>
+        <h6 class="fw-bold text-light">DNS Tunneling &amp; DGA</h6>
+        <p class="small text-muted mb-3">Detects high-entropy subdomains, deep nesting, and covert DNS data exfiltration channels.</p>
+        <button class="btn btn-sm btn-outline-primary w-100" onclick="runHunt('dns_tunneling')">Run Hunt Query</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Playbook 8: Canary Honey-Tokens -->
+  <div class="col-md-3">
+    <div class="card h-100 border-success">
+      <div class="card-body">
+        <div class="text-success small text-uppercase fw-bold mb-1">Playbook #8 • Deception</div>
+        <h6 class="fw-bold text-light">Honey-Token Traps</h6>
+        <p class="small text-muted mb-3">Audits accesses and tampering events against planted canary files and dummy credential vaults.</p>
+        <button class="btn btn-sm btn-outline-success w-100" onclick="runHunt('canary')">Run Hunt Query</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+
 <!-- Hunting Results Console -->
 <div class="card">
   <div class="card-header d-flex justify-content-between align-items-center">

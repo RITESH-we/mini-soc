@@ -231,14 +231,14 @@ def api_hunting_run():
 
     if htype == 'lolbins':
         playbook_name = "LOLBins & Script Interpreters (T1059)"
-        targets = ['powershell', 'certutil', 'cmd.exe', 'mshta', 'wscript', 'cscript', 'bitsadmin']
+        targets = ['powershell', 'certutil', 'cmd.exe', 'mshta', 'wscript', 'cscript', 'bitsadmin', 'rundll32', 'regsvr32', 'vssadmin', 'schtasks', 'wevtutil', 'curl']
         clause = " OR ".join(["LOWER(details) LIKE ?" for _ in targets])
         params = [f"%{t}%" for t in targets]
-        results = conn.execute(f"SELECT * FROM telemetry_logs WHERE log_type='PROCESS' AND ({clause}) ORDER BY id DESC LIMIT 50", params).fetchall()
+        results = conn.execute(f"SELECT * FROM telemetry_logs WHERE (log_type='PROCESS' OR log_type='SECURITY_EVENT') AND ({clause}) ORDER BY id DESC LIMIT 50", params).fetchall()
 
     elif htype == 'suspicious_ports':
-        playbook_name = "Anomalous Outbound Ports (T1071)"
-        ports = [':4444', ':1337', ':8888', ':7070', ':9001', ':6667', ':31337']
+        playbook_name = "Anomalous & Lateral Movement Ports (T1071 / T1021)"
+        ports = [':4444', ':1337', ':8888', ':7070', ':9001', ':6667', ':31337', ':445', ':3389', ':5985', ':22', ':1433', ':3306', ':6379']
         clause = " OR ".join(["details LIKE ?" for _ in ports])
         params = [f"%{p}%" for p in ports]
         results = conn.execute(f"SELECT * FROM telemetry_logs WHERE log_type='NETWORK_CONN' AND ({clause}) ORDER BY id DESC LIMIT 50", params).fetchall()
@@ -246,13 +246,49 @@ def api_hunting_run():
     elif htype == 'recon':
         playbook_name = "Host & Network Reconnaissance (T1087 / T1082)"
         tools = ['whoami', 'net user', 'net group', 'tasklist', 'ipconfig', 'nltest', 'systeminfo']
-        clause = " OR ".join(["LOWER(details) LIKE ?" for _ in targets if targets] if 'targets' in locals() else ["LOWER(details) LIKE ?" for _ in tools])
+        clause = " OR ".join(["LOWER(details) LIKE ?" for _ in tools])
         params = [f"%{t}%" for t in tools]
         results = conn.execute(f"SELECT * FROM telemetry_logs WHERE ({clause}) ORDER BY id DESC LIMIT 50", params).fetchall()
 
     elif htype == 'auth':
         playbook_name = "Cross-Host Authentication Anomalies (T1110)"
-        results = conn.execute("SELECT * FROM telemetry_logs WHERE log_type='SECURITY_EVENT' OR details LIKE '%4625%' ORDER BY id DESC LIMIT 50").fetchall()
+        results = conn.execute("SELECT * FROM telemetry_logs WHERE log_type='SECURITY_EVENT' AND (details LIKE '%4625%' OR details LIKE '%Logon failure%') ORDER BY id DESC LIMIT 50").fetchall()
+
+    elif htype == 'masquerading':
+        playbook_name = "Process Masquerading & Disguised Binaries (T1036)"
+        results = conn.execute("""
+            SELECT * FROM telemetry_logs 
+            WHERE (log_type='PROCESS' OR log_type='SECURITY_EVENT')
+              AND (details LIKE '%Masquerading%' 
+                   OR (LOWER(details) LIKE '%svchost%' AND (LOWER(details) LIKE '%appdata%' OR LOWER(details) LIKE '%temp%'))
+                   OR (LOWER(details) LIKE '%lsass%' AND (LOWER(details) LIKE '%appdata%' OR LOWER(details) LIKE '%temp%')))
+            ORDER BY id DESC LIMIT 50
+        """).fetchall()
+
+    elif htype == 'persistence':
+        playbook_name = "Persistence Mechanisms (Run Keys & Scheduled Tasks - T1547 / T1053)"
+        results = conn.execute("""
+            SELECT * FROM telemetry_logs 
+            WHERE details LIKE '%Persistence%' OR details LIKE '%4698%' OR details LIKE '%7045%' OR details LIKE '%Run Key%'
+            ORDER BY id DESC LIMIT 50
+        """).fetchall()
+
+    elif htype == 'dns_tunneling':
+        playbook_name = "Covert DNS Tunneling & DGA Channels (T1071.004)"
+        results = conn.execute("""
+            SELECT * FROM telemetry_logs 
+            WHERE details LIKE '%DNS Tunneling%' OR details LIKE '%DGA%' OR details LIKE '%Shannon entropy%'
+            ORDER BY id DESC LIMIT 50
+        """).fetchall()
+
+    elif htype == 'canary':
+        playbook_name = "Deception Honey-Token Canary Traps (T1081)"
+        results = conn.execute("""
+            SELECT * FROM telemetry_logs 
+            WHERE details LIKE '%Canary%' OR details LIKE '%Honey-Token%'
+            ORDER BY id DESC LIMIT 50
+        """).fetchall()
+
 
     conn.close()
     duration = int((datetime.now() - start_t).total_seconds() * 1000)
@@ -549,6 +585,16 @@ def api_network_inspect():
     detected = inspect_network_activity(auto_block=auto_ips)
     return jsonify({"detected_count": len(detected), "alerts": detected})
 
+@app.route('/api/network/subnet_scan', methods=['POST'])
+def api_network_subnet_scan():
+    from network.nsm_engine import scan_subnet_range
+    req_json = request.get_json(silent=True) or {}
+    subnet = req_json.get('subnet', '127.0.0.1/32')
+    ports = req_json.get('ports')
+    results = scan_subnet_range(subnet, ports=ports)
+    return jsonify(results)
+
+
 # ── Endpoint Fleet & Live Telemetry Inspector ─────────────────
 @app.route('/agents')
 def agents_view():
@@ -801,7 +847,54 @@ def receive_telemetry():
                     VALUES (?, 'HIGH', ?, ?, ?, ?, ?, ?, 1, 'Execution', ?, ?, 'OPEN', ?)
                 """, (now_iso, f"Suspicious Tool: {tool_rname}", f"Suspicious tool {pname} actively running on {hostname} (PID: {p.get('pid', '-')})", ip_addr, hostname, hostname, pname, tool_tech, json.dumps(p), tool_cat))
 
+        # 6. Check for Process Masquerading (Disguised Malware - T1036.005)
+        SYSTEM_BINARIES = {
+            'svchost.exe': r'c:\windows\system32',
+            'lsass.exe': r'c:\windows\system32',
+            'csrss.exe': r'c:\windows\system32',
+            'services.exe': r'c:\windows\system32',
+            'smss.exe': r'c:\windows\system32',
+            'explorer.exe': r'c:\windows'
+        }
+        SUSPICIOUS_DIRS = ['\\appdata\\', '\\temp\\', '\\tmp\\', '\\users\\', '\\downloads\\', '\\programdata\\']
+        for p in data.get('processes', []):
+            pname = p.get('name', '').lower()
+            pexe = (p.get('executable_path') or '').lower()
+            if pname in SYSTEM_BINARIES and pexe:
+                expected_dir = SYSTEM_BINARIES[pname]
+                if not pexe.startswith(expected_dir) or any(k in pexe for k in SUSPICIOUS_DIRS):
+                    conn.execute("""
+                        INSERT INTO alerts (timestamp, severity, rule_name, description, src_ip, src_user, device_name, process, event_id, mitre_tactic, mitre_technique, raw_event, status, threat_category)
+                        VALUES (?, 'CRITICAL', 'Process Masquerading (Disguised Malware)', ?, ?, ?, ?, ?, 9005, 'Defense Evasion', 'T1036.005 - Masquerading', ?, 'OPEN', 'DEFENSE_EVASION')
+                    """, (now_iso, f"CRITICAL EVASION ALERT: System binary '{pname}' executing from abnormal directory '{pexe}' on {hostname}! Potential disguised malware.", ip_addr, hostname, hostname, pname, json.dumps(p)))
+
+        # 7. Automated Multi-Vector Attack Chain Correlator
+        from datetime import timedelta
+        time_15m_ago = (datetime.now() - timedelta(minutes=15)).isoformat()
+        recent_tactics = conn.execute("""
+            SELECT DISTINCT mitre_tactic FROM alerts
+            WHERE device_name=? AND timestamp >= ? AND mitre_tactic IS NOT NULL AND mitre_tactic != 'Execution'
+        """, (hostname, time_15m_ago)).fetchall()
+        distinct_tactics = [r[0] for r in recent_tactics if r[0]]
+        
+        if len(distinct_tactics) >= 2:
+            existing_inc = conn.execute("""
+                SELECT id FROM incidents
+                WHERE title LIKE ? AND status='OPEN'
+            """, (f"%Multi-Vector Attack Chain%{hostname}%",)).fetchone()
+            if not existing_inc:
+                inc_title = f"Multi-Vector Attack Chain on {hostname} ({', '.join(distinct_tactics[:3])})"
+                inc_summary = (
+                    f"Automated Multi-Vector Correlation: Host '{hostname}' triggered alerts across multiple MITRE tactics "
+                    f"({', '.join(distinct_tactics)}) within 15 minutes. Indicates an active, multi-stage attack sequence."
+                )
+                conn.execute("""
+                    INSERT INTO incidents (title, severity, status, analyst, created_at, updated_at, summary)
+                    VALUES (?, 'CRITICAL', 'OPEN', 'Nova AI', ?, ?, ?)
+                """, (inc_title, now_iso, now_iso, inc_summary))
+
         conn.commit()
+
     finally:
         conn.close()
 

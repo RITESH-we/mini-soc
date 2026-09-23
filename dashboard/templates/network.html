@@ -102,6 +102,52 @@
   </div>
 </div>
 
+<!-- Active Subnet IP & Port Discovery Scanner -->
+<div class="card mb-4 border-info">
+  <div class="card-header bg-dark text-info border-secondary d-flex justify-content-between align-items-center">
+    <span><strong>🌐 Active Subnet IP &amp; Port Discovery Scanner</strong></span>
+    <span class="badge bg-secondary">Reconnaissance &amp; Rogue Device Detection</span>
+  </div>
+  <div class="card-body">
+    <div class="row g-2 align-items-end mb-3">
+      <div class="col-md-5">
+        <label class="form-label small text-muted">Target Subnet CIDR / IP Range</label>
+        <input type="text" id="subnetInput" class="form-control bg-dark text-light border-secondary font-monospace" placeholder="e.g. 192.168.1.0/24 or 127.0.0.1/32" value="192.168.1.0/24">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label small text-muted">Monitored Service Ports (comma-separated)</label>
+        <input type="text" id="subnetPorts" class="form-control bg-dark text-light border-secondary font-monospace" value="21, 22, 80, 443, 445, 3389, 5985, 8080">
+      </div>
+      <div class="col-md-3">
+        <button id="scanSubnetBtn" class="btn btn-info w-100 fw-bold" onclick="runSubnetScan()">
+          🚀 Scan Subnet
+        </button>
+      </div>
+    </div>
+
+    <div id="subnetScanResults" style="display:none;">
+      <div class="d-flex justify-content-between align-items-center mb-2">
+        <span id="scanSummary" class="small text-muted"></span>
+        <button class="btn btn-xs btn-outline-secondary" onclick="document.getElementById('subnetScanResults').style.display='none'">✕ Clear</button>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-sm table-bordered border-secondary mb-0">
+          <thead class="table-dark">
+            <tr>
+              <th>Host IP</th>
+              <th>Resolved Hostname</th>
+              <th>Status</th>
+              <th>Discovered Open Ports</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="subnetHostsTbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Network Alerts & IDS Detection Table -->
 <div class="card">
   <div class="card-header bg-dark text-light border-secondary d-flex justify-content-between align-items-center">
@@ -168,5 +214,71 @@ function triggerScanCheck() {
       location.reload();
     });
 }
+
+function runSubnetScan() {
+  const subnet = document.getElementById('subnetInput').value.trim();
+  const portsRaw = document.getElementById('subnetPorts').value.trim();
+  const ports = portsRaw.split(',').map(p => parseInt(p.trim())).filter(p => !isNaN(p));
+  const btn = document.getElementById('scanSubnetBtn');
+  const resDiv = document.getElementById('subnetScanResults');
+  const summary = document.getElementById('scanSummary');
+  const tbody = document.getElementById('subnetHostsTbody');
+
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Scanning...';
+  resDiv.style.display = 'block';
+  summary.innerHTML = '<span class="text-info">Sweeping subnet ' + subnet + ' across ' + ports.length + ' ports...</span>';
+  tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-3">Scanning in progress...</td></tr>';
+
+  fetch('/api/network/subnet_scan', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({subnet: subnet, ports: ports})
+  })
+  .then(r => r.json())
+  .then(data => {
+    btn.disabled = false;
+    btn.innerHTML = '🚀 Scan Subnet';
+
+    if (data.error) {
+      summary.innerHTML = '<span class="text-danger">Error: ' + data.error + '</span>';
+      tbody.innerHTML = '';
+      return;
+    }
+
+    summary.innerHTML = '<strong>' + data.live_hosts_count + ' live hosts discovered</strong> out of ' + data.scanned_ips + ' IPs in ' + data.scan_duration_sec + 's (' + data.subnet + ')';
+    if (!data.hosts || data.hosts.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-3">No responsive hosts found on this subnet.</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = data.hosts.map(h => {
+      const portBadges = h.open_ports.length > 0 
+        ? h.open_ports.map(p => '<span class="badge bg-danger me-1">:' + p + '</span>').join('')
+        : '<span class="text-muted small">Ping Only</span>';
+      return `
+        <tr>
+          <td class="font-monospace text-warning fw-bold">${h.ip}</td>
+          <td>${h.hostname || '<span class="text-muted">-</span>'}</td>
+          <td><span class="badge bg-success">${h.status}</span></td>
+          <td>${portBadges}</td>
+          <td>
+            <form method="POST" action="/network/block" style="display:inline;">
+              <input type="hidden" name="ip_address" value="${h.ip}">
+              <input type="hidden" name="reason" value="Subnet Discovery Scan: Live Host">
+              <button class="btn btn-xs btn-outline-danger">🚫 Contain IP</button>
+            </form>
+          </td>
+        </tr>
+      `;
+    }).join('');
+  })
+  .catch(err => {
+    btn.disabled = false;
+    btn.innerHTML = '🚀 Scan Subnet';
+    summary.innerHTML = '<span class="text-danger">Scan request failed: ' + err + '</span>';
+  });
+}
 </script>
 {% endblock %}
+
