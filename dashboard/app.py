@@ -1121,6 +1121,8 @@ def health():
         conn.close()
 
 if __name__ == '__main__':
-    app.run(host=config.get('dashboard', {}).get('host', '0.0.0.0'),
-            port=config.get('dashboard', {}).get('port', 5000),
-            debug=config.get('dashboard', {}).get('debug', True))
+    port = int(os.environ.get('PORT', config.get('dashboard', {}).get('port', 5000)))
+    host = os.environ.get('HOST', config.get('dashboard', {}).get('host', '0.0.0.0'))
+    is_cloud = bool(os.environ.get('PORT'))
+    debug = False if is_cloud else config.get('dashboard', {}).get('debug', True)
+    app.run(host=host, port=port, debug=debug)
