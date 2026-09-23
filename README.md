@@ -1,66 +1,68 @@
-# 🛡️ MiniSOC v2.3 Enterprise — Cloud-Ready SIEM, XDR & UEBA Platform
-### Synthesizing the Top 10 Enterprise SIEM Platforms into a Modern Cloud-Native Security Engine
+# 🔱 TRISHULA Enterprise v2.4 — Cloud-Ready SIEM, XDR & UEBA Platform
+### Threat Recognition, Incident Surveillance & Host Unified Lockdown Architecture
+*Synthesizing Ancient Sanatana-Vedic Vigilance with Greek Mythic Defense into a Modern Zero-Evasion Security Fabric*
 
 [![Python](https://img.shields.io/badge/Python-3.11+-blue.svg?logo=python&logoColor=white)](https://www.python.org/)
 [![Web UI](https://img.shields.io/badge/Web_UI-Flask-000000.svg?logo=flask&logoColor=white)](https://flask.palletsprojects.com/)
 [![Security](https://img.shields.io/badge/Security-MITRE_ATT%26CK_v14-red.svg)](https://attack.mitre.org/)
 [![Schema](https://img.shields.io/badge/Schema-OCSF%20%2F%20ECS-blueviolet.svg)](https://schema.ocsf.io)
-[![Top 5 Attacks](https://img.shields.io/badge/EDR-Top_5_Attack_Vectors-critical.svg)](#-top-5-most-critical-cyber-attack-use-cases--advanced-threat-suite)
-[![UEBA](https://img.shields.io/badge/UEBA-Behavioral_Risk_Engine-purple.svg)](#-behavioral-ueba-risk-engine-exabeam--securonix-inspiration)
-[![Tests](https://img.shields.io/badge/Tests-100%25_Passing-success.svg)](tests/test_top5_attacks.py)
-[![Cloud Ready](https://img.shields.io/badge/Deployment-Docker%20%7C%20Cloud-informational.svg)](Dockerfile)
-[![Threat Intel](https://img.shields.io/badge/Threat_Intel-VT_%7C_AbuseIPDB_%7C_ThreatFox_%7C_OTX-green.svg)](https://threatfox.abuse.ch/)
-[![Architecture](https://img.shields.io/badge/Architecture-Enterprise_Deep_Dive-orange.svg)](ARCHITECTURE.md)
+[![CI Pipeline](https://img.shields.io/badge/CI-GitHub_Actions_100%25_Passing-success.svg)](.github/workflows/ci.yml)
+[![Anti-Evasion](https://img.shields.io/badge/Anti--Evasion-De--obfuscation_%7C_Canary_%7C_Masquerading-orange.svg)](#-enterprise-multi-vector-defense--anti-evasion-fabric)
+[![Active Scanning](https://img.shields.io/badge/Network-Active_Subnet_Scanner-informational.svg)](#-active-subnet-ip--port-discovery-scanner)
 [![License: MIT](https://img.shields.io/badge/License-MIT-lightgrey.svg)](LICENSE)
 
-**MiniSOC** is an enterprise-grade, cloud-ready Security Operations Center (SOC) Level 1/2 monitoring, orchestration, and active defense platform. 
+---
 
-It was engineered by identifying the foundational architectural bottlenecks, proprietary lock-ins, and operational limitations across the **10 leading enterprise SIEM platforms** (**Splunk ES, Microsoft Sentinel, IBM QRadar, Elastic Security, Exabeam, Securonix, Rapid7 InsightIDR, Sumo Logic, LogRhythm, and ManageEngine Log360**) and synthesizing their greatest strengths into a unified, high-performance, open-schema architecture.
+## 🏛️ The Mythos & Identity: What is TRISHULA?
+
+**TRISHULA** is an enterprise-grade, cloud-ready Security Operations Center (SOC) Level 1/2 monitoring, orchestration, and active defense platform.
+
+The platform draws its identity from two ancient traditions of eternal vigilance:
+* **The Sanatana (Vedic) Trishula (त्रिशूल)**: The primordial three-pointed trident of cosmic order and truth. The three prongs represent the three indivisible pillars of modern cybersecurity:
+  1. **Endpoint XDR** (Deep Process Lineage, Parent-PID Tracking, Honey-Token Deception Traps)
+  2. **Network NSM** (Passive Socket Inspection, Stealth Port-Sweep Detection, Active Subnet Discovery)
+  3. **Cloud SIEM & SOAR** (MITRE ATT&CK v14 Correlation, Automated Firewall Containment, Nova AI Analyst)
+* **The Greek Trident & Aegis**: Mirroring the ancient sea-sovereign's trident and the unyielding celestial shield (*Aegis*) that no mortal or titan could pierce.
+
+### 📐 The Technical Acronym:
+* **T** — **Threat**
+* **R** — **Recognition**,
+* **I** — **Incident**
+* **S** — **Surveillance** &
+* **H** — **Host**
+* **U** — **Unified**
+* **L** — **Lockdown**
+* **A** — **Architecture**
 
 ---
 
-## 🏛️ Enterprise SIEM Flaw Analysis & MiniSOC Synthesis
+## 🛡️ Enterprise Multi-Vector Defense & Anti-Evasion Fabric
 
-| Enterprise Platform | Major Industry Flaws / Pain Points | MiniSOC Next-Gen Architectural Solution |
-| :--- | :--- | :--- |
-| **Splunk Enterprise Security** | Exorbitant GB/day indexing costs, proprietary SPL lock-in, resource-heavy search heads. | Lightweight OCSF/ECS-compliant JSON schema, zero proprietary query lock-in, sub-second indexing without memory bloat. |
-| **Microsoft Sentinel** | Cloud lock-in to Azure, expensive Log Analytics retention tiers, data egress fees. | 100% cloud-agnostic portable architecture (Docker, AWS ECS, GCP Cloud Run, Azure Container Apps, or bare metal). |
-| **IBM QRadar** | Outdated legacy UI; fragile Device Support Modules (DSMs) that break on minor log changes; heavy Java stack. | Modern dark-mode SOC analyst console; resilient, dynamic schema-on-read JSON parser; lightweight Python asyncio backend. |
-| **Elastic Security** | Steep learning curve for ECS mappings; lacks native out-of-the-box UEBA without expensive Platinum tier; ILM crashes. | Built-in UEBA (User & Entity Behavior Analytics) risk scoring engine included natively with auto-rotating data retention. |
-| **ManageEngine Log360** | Slow query engine; primarily compliance/audit oriented; weak real-time threat correlation across non-Windows logs. | Real-time multi-stage correlation engine mapped directly to MITRE ATT&CK Enterprise Matrix v14 for proactive threat detection. |
-| **Exabeam** | Heavily dependent on third-party collectors for raw ingestion; complex timeline stitching. | End-to-end integrated stack: from lightweight zero-dependency endpoint agent up to interactive timeline reconstruction. |
-| **Securonix** | Opaque black-box ML models; difficult to tune or explain alert causation in SOC L1 triage. | Explainable AI & Humanoid SOC Analyst ("Nova") delivering transparent, step-by-step Root Cause Analysis (RCA) with full evidence breakdown. |
-| **Rapid7 InsightIDR** | Rigid LEQL query syntax; limited support for custom log types and deep event parsing. | Universal JSON structured queries with field-level filtering on extracted Windows/Linux/Cloud attributes. |
-| **Sumo Logic** | Query timeouts on large multi-tenant data lakes; high variable ingestion costs. | Local & edge pre-filtering with client-side event deduplication, state tracking (Record ID), and structured batch dispatch. |
-| **LogRhythm** | Legacy on-premise heritage; complex MDI fabric; rigid manual playbook execution. | Automated zero-touch SOAR playbooks (Host Isolation, Firewall IPS drops, Process Termination) executable in 1 click. |
+Modern adversaries rarely attack from a single vector or execute plain `.exe` files. **TRISHULA** features 10 coordinated anti-evasion layers engineered specifically to neutralize stealth tactics:
 
-> 📖 **Deep Dive**: Read the complete architectural blueprint, technical comparison, and interview guide in **[ARCHITECTURE.md](ARCHITECTURE.md)**!
-
----
-
-## 🔬 Rigorous SIEM Component Audit & Architectural Scorecard
-
-Comparing MiniSOC against the **7 Core Technical Pillars of an Enterprise SIEM** (Gartner Magic Quadrant, NIST SP 800-61 Rev 2, and CISA guidelines):
-
-| SIEM Component Pillar | Enterprise Standard Requirement | MiniSOC Architectural Implementation | Completeness & Compliance |
+| Anti-Evasion Capability | Adversary Deception Technique Defeated | Technical Implementation | MITRE ATT&CK |
 | :--- | :--- | :--- | :--- |
-| **1. Log Ingestion & Collection** | Multi-source event harvesting (Windows EVTX, Linux syslogs, Cloud audit trails). | Zero-dependency Windows Event XML agent, Linux/Android socket telemetry, HTTP/REST webhooks (`/api/v1/telemetry`, `/api/v1/cloud/ingest`) with at-least-once transactional delivery watermarks. *(Raw UDP 514 syslog daemon replaced with modern JSON webhooks).* | 🟢 **85% Complete** (Modern Agent & Webhooks) |
-| **2. Normalization & Schema Mapping** | Common Information Model (OCSF, ECS, CIM). | Strict OCSF and ECS JSON schema alignment. Normalized decomposition of process lineage (`image`, `processId`, `parentImage`, `parentProcessId`, `commandLine`, `hashes`, `user`, `integrityLevel`). | 🟢 **95% Complete** (OCSF & ECS Aligned) |
-| **3. Indexing & Storage Engine** | Fast write indexing, high concurrency, partitioned retention. | Embedded SQLite with Write-Ahead Logging (WAL mode), multi-column compound B-Tree indexing, and sub-millisecond query latency. Engineered for single-node / lab fleet scale. | 🟢 **85% Complete** (High-Concurrency WAL Mode) |
-| **4. Real-Time Correlation Engine** | Stateful rule engines, MITRE ATT&CK mapping. | Real-time stateful correlation engine with regex CLI inspection, MITRE ATT&CK v14 mapping, and dedicated detection modules for the Top 5 modern attack vectors (Ransomware, PtH, LotL, C2, Persistence). | 🟢 **95% Complete** (MITRE v14 + Top 5 Vectors) |
-| **5. Behavioral Analytics (UEBA)** | Dynamic entity risk scoring, anomaly detection. | Behavioral risk engine (0–100 pts) for both Users and Hosts (inspired by Exabeam & Securonix). Dynamic tiers (`LOW` to `CRITICAL`) with attack multipliers. *(Heuristic-based rather than 90-day unsupervised Bayesian clustering).* | 🟢 **85% Complete** (Dynamic Scoring Active) |
-| **6. Threat Intelligence (CTI)** | Automated IOC enrichment, IP reputation feeds. | Automated integration with 4 live feeds (**VirusTotal v3, AbuseIPDB v2, ThreatFox, AlienVault OTX**) with RFC 1918 private loopback filter. | 🟢 **90% Complete** (4 Feeds + RFC 1918 Guard) |
-| **7. Incident Management & SOAR (Active Defense)** | Ticket management, automated playbooks, containment. | **Exceeds passive SIEMs**: Native EDR containment with 1-Click Host Network Isolation, local host firewall IPS drops (`netsh`/`iptables`), process termination, and Nova AI NIST SP 800-61 PDF report generator. | 🟢 **95% Complete** (Active Defense & Containment) |
+| **Deep Process Lineage** | **Process Masquerading**: Renaming malware to `svchost.exe` running from `AppData` or `Temp`. | Queries `Win32_Process` via PowerShell/WMI to extract full `ExecutablePath`, `CommandLine`, `ParentProcessId` (PPID), and memory footprint. Flags any system binary running outside `System32`. | **T1036.005** |
+| **Base64 De-obfuscation** | **Obfuscated PowerShell**: Hiding download cradles inside `-enc` or `-encodedcommand`. | Transparent real-time UTF-16LE Base64 decoder unwraps payloads in memory and audits the raw script block against attack signatures. | **T1059.001** |
+| **Multi-Channel Windows Auditing** | **Blind Spot Exploitation**: Attacking services or wiping logs to blind security agents. | Ingests `Security`, `System` (Services & Log Clearing), `PowerShell/Operational`, and `Windows Defender/Operational` with a high-capacity 50-event batch window. | **T1070.001 / T1543.003** |
+| **Deception Honey-Tokens** | **Credential Stealers & Ransomware**: Adversaries scraping local files for passwords. | Plants a monitored canary credential vault (`minisoc_vault_creds.db`). Any unauthorized read, modification, or deletion fires an immediate **CRITICAL** containment alert. | **T1081** |
+| **Persistence Watcher** | **Reboot Backdoors**: Modifying registry autorun keys to survive endpoint restarts. | Continuously audits `HKCU` and `HKLM` Windows Run keys and Startup directories. New additions trigger instant escalation. | **T1547.001** |
+| **USB Media Monitor** | **Physical Access & BadUSB**: Rubber Ducky / rogue thumb drives inserted into hosts. | Monitors `Win32_DiskDrive` for new USB bus arrivals and logs serial/hardware identifiers. | **T1091** |
+| **Stealth Port Sweep NSM** | **Low-and-Slow Scans**: Scanning 1 port every 15s to bypass short rate-limit windows. | Extended 60-second sliding inspection window with a lowered 4-port threshold across sensitive management ports (`22, 445, 3389, 5985, 1433, 3306, 6379`). | **T1046** |
+| **DNS Tunneling & DGA** | **Covert C2 Exfiltration**: Smuggling stolen data through DNS `UDP 53` queries. | Calculates Shannon character entropy and evaluates domain nesting depth (>3 subdomains, entropy >3.8) to catch covert channels. | **T1071.004** |
+| **Active Subnet Discovery** | **Rogue & Unmanaged Devices**: Shadow IT or unauthorized machines plugged into the LAN. | Multi-threaded `/24` subnet sweeper built into `/network` that probes live hosts and open ports across the entire local IP range. | **T1595** |
+| **Multi-Vector Correlator** | **Multi-Stage Attacks**: Phishing &rarr; Credential Theft &rarr; Lateral Movement. | Automatically correlates events spanning multiple MITRE tactics within 15 minutes into unified High-Severity Incidents. | **Multi-Tactic** |
 
 ---
 
 ## 🏗️ Distributed System Architecture
 
 ```
-                       [ Distributed Endpoint Agents ]           [ Cloud & Syslog Webhooks ]
-                        (Processes, Sockets, XML Events)          (AWS, GCP, Azure, Syslog)
-                                    │                                      │
-                                    └──────────────────┬───────────────────┘
+                       [ Distributed TRISHULA Agents ]           [ Cloud & Syslog Webhooks ]
+                        (Processes, Lineage, Sockets,             (AWS, GCP, Azure, Syslog)
+                         Canary, USB, Multi-Channel EVTX)                     │
+                                    │                                         │
+                                    └──────────────────┬──────────────────────┘
                                                        ▼
                                           [ OCSF / ECS Parser & Normalizer ]
                                           (EventRecordID Watermark Deduplication)
@@ -70,356 +72,146 @@ Comparing MiniSOC against the **7 Core Technical Pillars of an Enterprise SIEM**
                                         │    Detection & UEBA Engine    │
                                         │    • Dynamic Host & User Risk │
                                         │    • MITRE ATT&CK Matrix v14  │
+                                        │    • Multi-Vector Correlator  │
                                         └───────────────┬───────────────┘
                                                        │
                            ┌───────────────────────────┴───────────────────────────┐
                            ▼                                                       ▼
                ┌───────────────────────┐                               ┌───────────────────────┐
-               │   Threat Intel Hub    │                               │  Active IPS Defense   │
+               │   Threat Intel Hub    │                               │  Active SOAR Defense  │
                │  • VirusTotal v3      │                               │  • Auto Host Firewall │
-               │  • AbuseIPDB v2       │                               │    Blocking (netsh)   │
-               │  • ThreatFox (abuse)  │                               │  • 1-Click EDR Quarant│
-               │  • AlienVault OTX     │                               └───────────────────────┘
-               └───────────┬───────────┘
+               │  • AbuseIPDB v2       │                               │    Drops (netsh/ipt)  │
+               │  • ThreatFox (abuse)  │                               │  • 1-Click Quarantine │
+               │  • AlienVault OTX     │                               │  • Remote Process Kill│
+               └───────────┬───────────┘                               └───────────────────────┘
                            │
                            ▼
           ┌─────────────────────────────────────────────────────────────────┐
-          │                    MiniSOC Web Operations Center                │
+          │                  TRISHULA Web Operations Center                 │
           ├────────────────────────────────┬────────────────────────────────┤
           │  Analyst Triage & Event Feed   │  🤖 Nova AI Analyst Co-Pilot   │
-          │  Live NSM Network Traffic View │  Autonomous RCA Briefings      │
+          │  Active Subnet & NSM Monitor   │  Autonomous RCA Briefings      │
           │  Endpoint Fleet & UEBA Matrix  │  NIST SP 800-61 PDF Reports    │
+          │  Threat Hunting Playbooks (8)  │  Deception Honey-Token Console │
           └────────────────────────────────┴────────────────────────────────┘
 ```
 
 ---
 
-## 🌟 Key Capabilities
+## 🚀 Quick Start Guide
 
-### 1. Structured XML Telemetry, Deduplication & At-Least-Once Delivery
-- Querying Windows Event Log via `/f:xml` using standard library `xml.etree.ElementTree` (zero third-party dependencies).
-- Extracts exact security fields: **`EventID`**, **`TargetUserName`**, **`IpAddress`**, **`LogonType`**, **`Status`**, **`SubStatus`**, **`CommandLine`**, and **`ParentProcessName`**.
-- **At-Least-Once Delivery Architecture**: The high-watermark state is only committed to disk *after* the SOC server returns an HTTP 200 acknowledgement. If network connectivity drops or the server reboots, telemetry is retained in memory and re-transmitted, guaranteeing zero event loss.
-- **Persistent Auto-Start Daemon**: Survives system reboots and power-offs. Engineered with zero-popup headless execution (`CREATE_NO_WINDOW` and `SW_HIDE` process flags ensuring zero CMD or console flashes during periodic EVTX/socket polling). Features dual-tier auto-start on Windows (zero-privilege headless VBS startup runner + elevated Windows Task Scheduler) and native `systemd` service management on Linux with automatic failure recovery.
-- **Continuous Security Posture Auditing**: Automatically reports local Antivirus engine health (Windows Defender service state), Windows Firewall profile enforcement (Domain/Private/Public), and administrative privilege elevation.
+### Prerequisites
+* Python 3.11 or higher
+* Git
 
-### 2. High-Concurrency Storage & Indexing Engine (WAL Mode)
-- **SQLite Write-Ahead Logging (WAL)**: Configured `PRAGMA journal_mode = WAL`, `synchronous = NORMAL`, and `busy_timeout = 10000`, enabling non-blocking concurrent reads and writes across simultaneous agent telemetry streams and analyst queries.
-- **Compound B-Tree Indexing**: Dedicated multi-column indexes on `alerts(device_name, timestamp)`, `alerts(src_user, timestamp)`, `alerts(status)`, and `telemetry_logs(hostname, timestamp)` eliminating full-table scans.
+### 1-Click Automated Setup (Recommended)
 
-### 3. Behavioral UEBA Risk Engine (Exabeam & Securonix Inspiration)
-- Computes real-time dynamic risk scores (0–100) for both **Hosts** and **Users**.
-- Behavioral scoring matrix:
-  - Repeated authentication failures: $+15$ pts
-  - Suspicious process execution (`mimikatz`, `psexec`, `powershell -enc`): $+40$ pts
-  - Privilege tampering & security group additions: $+35$ pts
-  - Dynamic risk tiers: `LOW (0-24)`, `MEDIUM (25-49)`, `HIGH (50-74)`, `CRITICAL (75-100)`
-
-### 4. Multi-Feed Threat Intelligence Hub & RFC 1918 Guard
-- Integrated **AlienVault OTX**, **VirusTotal v3**, **AbuseIPDB**, and **abuse.ch ThreatFox** (zero API key needed for public feeds).
-- **Private RFC 1918 Filter**: Automatically detects internal/loopback traffic, returning instant LAN classification without wasting external API quota.
-
-### 5. Proactive Endpoint Defense & SOAR Containment (EDR)
-- **Granular Endpoint Policy Profiles**:
-  - **`standard_workstation`** (Default): Balanced 15-second heartbeat, analyst-driven containment, low resource footprint.
-  - **`high_security_server`**: High-frequency 5-second heartbeat with strict automated kernel-level drop enforcement against critical C2 and port sweeps.
-  - **`audit_friend` (Safe BYOD Mode)**: Designed for friends' laptops, home systems, or lab endpoints. Streams full OCSF event logs, process tables, and active sockets while completely disabling disruptive automated firewall locks, ensuring regular browsing and gaming are never interrupted.
-- **Selectable Firewall Containment Profiles**:
-  - **`BIDIRECTIONAL_DROP`**: Inbound + Outbound kernel-level drop on remote IP (`netsh` / `iptables`).
-  - **`OUTBOUND_C2_DROP`**: Drops outbound packets only (severing attacker C2 beaconing and data exfiltration while preserving diagnostic inbound pings).
-  - **`HOST_QUARANTINE`**: Complete network isolation of a compromised endpoint while preserving the SOC management communication channel.
-- **Bidirectional Endpoint-Edge Firewall Drops & 1-Click Unblock**: When an analyst or IPS rule blocks an IP, the command is dispatched down to all active endpoint agents, enforcing kernel-level firewall drops (`netsh advfirewall` / `iptables`) on the devices themselves. Blocks can be lifted just as easily with 1-click (`🟢 Unblock IP`) from either the Alerts triage feed or the Network Security Monitoring console, immediately clearing local host firewall rules.
-- **Continuous Real-Time Live Sync**: The Operations Center dashboard features a real-time auto-synchronization engine (`/api/live/metrics`) that polls every 8 seconds, dynamically updating threat counts, fleet health status, and live alert feeds without full-page reloads.
-- **Autonomous Process Termination**: Remote and automated termination of attacker tooling (`mimikatz`, `nc.exe`, `psexec.exe`).
-- **Live NSM Inspection**: Robust IPv4/IPv6 socket inspection detecting inbound port sweeps (T1046) and cleartext protocol exposure (T1040).
-
-### 6. 🤖 Nova — Autonomous AI SOC Analyst Co-Pilot
-- Interactive AI co-pilot embedded in the dashboard.
-- **1-Click RCA**: Generates human-grade Root Cause Analysis narratives, blast radius estimates, and containment recommendations.
-- **NIST SP 800-61 Rev 2 Reports**: Generates formal incident PDF reports in 1 click.
-
-### 7. 🕵️ Insider Threat Detection & Behavioral Profiling
-- **Data Staging & Exfiltration Detection**: Flags suspicious bulk compression (`Compress-Archive`, `tar -czf`, `7z a`) targeting confidential repositories (`Documents`, `Desktop`, `.aws`, `.ssh`, `.git`) before scheduled employee offboarding.
-- **Privilege Tampering & Shadow Accounts**: Real-time auditing of rogue account creation (`Event 4720`) and high-privilege escalation (`Event 4732` member added to local `Administrators`).
-- **Anti-Forensics & Tampering**: Detects security event log clearing (`Event 1102` / `wevtutil cl`) and suspicious privilege enumeration (`whoami /priv` with `SeDebugPrivilege`).
-- **Dynamic UEBA Risk Escalation**: Automatically aggregates behavioral anomalies, escalating user risk scores to Critical (`>= 75 pts`) and surfacing them on the Top Risky Entities matrix.
-
-### 8. 🎯 Interactive Alert Triage Console & Wazuh-Style Forensic Log Inspector
-MiniSOC provides an enterprise-grade alert triage console modeled after **Wazuh Discover**, **OpenSearch Dashboards**, and real-world SOC benchmark investigations (such as **OpenSOC-Lab Case 001**), allowing L1/L2 security analysts to perform deep forensic examinations directly from the alert feed without switching consoles:
-
+#### Windows:
+```cmd
+setup.bat
 ```
-+---------------------------------------------------------------------------------------------------------+
-| [🔍 #16] 2026-09-20 00:42:52 | LENOVO | HIGH | 📜 LOTL / SCRIPT | Suspicious PowerShell Script Block    |
-+---------------------------------------------------------------------------------------------------------+
-| [WAZUH-STYLE LOG INSPECTOR]  Alert #16 — Suspicious PowerShell Script Block  [HIGH]  Host: LENOVO        |
-| Tabs: [ 📋 Forensic Table ]  [ { } Raw JSON ]  [ ⏱️ Surrounding Timeline ]                           [✕] |
-+---------------------------------------------------------------------------------------------------------+
-|                                                                                                         |
-|  [TAB 1: 📋 FORENSIC TABLE VIEW] (Process Lineage & Attribute Breakdown)                                 |
-|  • agent.name                     LENOVO                                                                |
-|  • data.win.system.eventID        4104                                                                  |
-|  • data.win.eventdata.image       C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe             |
-|  • data.win.eventdata.processId   9728                                                                  |
-|  • data.win.eventdata.parentImage services.exe                                                          |
-|  • data.win.eventdata.parentPID   9928                                                                  |
-|  • data.win.eventdata.commandLine Set-ExecutionPolicy -ExecutionPolicy ByPass -Scope CurrentUser...     |
-|  • data.win.eventdata.hashes      SHA256=AUTHENTICATED_WINDOWS_BINARY                                   |
-|  • data.win.eventdata.user        DESKTOP\rites                                                         |
-|  • rule.mitre.technique           T1059.001 - PowerShell                                                |
-|                                                                                                         |
-|  [TAB 2: { } RAW JSON VIEW]                                                                             |
-|  • Formatted, syntax-highlighted OCSF/Sysmon JSON payload with a 1-click "📋 Copy JSON" button.         |
-|                                                                                                         |
-|  [TAB 3: ⏱️ SURROUNDING TIMELINE CONTEXT] ("View Surrounding Documents" Model)                           |
-|  • Reconstructs the temporal execution window: queries ±8 events immediately preceding and following    |
-|    the incident on the target host, highlighting the exact alert trigger (🚨 [ALERT HIT]).             |
-+---------------------------------------------------------------------------------------------------------+
+*(Automatically creates Python virtualenv, installs locked dependencies, and initializes the high-concurrency database).*
+
+#### Linux / macOS:
+```bash
+bash setup.sh
 ```
-
-- **Expandable In-Place Log Inspector**: Clicking any alert row smoothly toggles the forensic inspection drawer:
-  - **📋 Forensic Table Tab**: Two-column key-value attribute view mapping process lineage (`image`, `processId`, `parentImage`, `parentProcessId`, `commandLine`, `parentCommandLine`), security tokens (`user`, `integrityLevel`, `hashes`), and rule definitions (`rule.id`, `rule.level`, `rule.mitre`).
-  - **{ } Raw JSON Tab**: Pretty-printed, syntax-highlighted OCSF/Sysmon event payload with 1-click clipboard copying for external reporting and SIEM forwarding.
-  - **⏱️ Surrounding Timeline Tab**: Temporal context reconstruction (`/api/alert/<id>/surrounding`) displaying adjacent host telemetry ($\pm 8$ events) before and after the alert to trace root cause processes.
-- **Unified SOC Filter Toolbar**: Clean, single-row filter toolbar to instantly slice triage queues by attack vectors (`Ransomware`, `Credential Access`, `Living-off-the-Land`, `C2 & Exfiltration`, `Persistence`), severity levels (`CRITICAL`, `HIGH`, `MEDIUM`, `LOW`), and target devices with instant live search and 1-click reset.
-- **🩺 1-Click Platform & Component Health Inspector**: Real-time diagnostic console accessible from any page via the top navigation bar. Interrogates `/api/health` to verify telemetry ingestion gateway status, SQLite WAL database integrity (`PRAGMA quick_check`), online endpoint heartbeats, MITRE v14 detection engines, behavioral UEBA scoring, and active SOAR firewall containment drops with live query latency benchmarking.
-- **Visual Attack Badges**: Color-coded badges with MITRE ATT&CK technique tags directly on alert rows.
-- **Direct 1-Click Containment**: Execute host isolation (`🛑 Isolate`) or IP blocks straight from the alert triage row without switching screens.
-- **Exportable Evidence**: Full CSV alert exports with MITRE techniques, threat categories, and threat intelligence scores for compliance reporting.
-
-### 9. 🩺 Real-Time Platform & Component Health Diagnostic Engine
-MiniSOC includes a continuous, production-grade diagnostic engine accessible from any console view via the top navigation bar (`Health` button with a real-time pulsing indicator):
-
-```
-+---------------------------------------------------------------------------------------------------------+
-| [🩺 MINISOC PLATFORM HEALTH]  Overall Status: [HEALTHY]  Latency: 104 ms  Checked: 14:58:39             |
-+---------------------------------------------------------------------------------------------------------+
-|                                                                                                         |
-|  [📥 INGESTION GATEWAY]           [OPERATIONAL]  Listening on 0.0.0.0:5000 (REST + Webhook Routes)      |
-|  [🗄️ DATABASE & INDEXING]         [OPERATIONAL]  SQLite WAL Mode, 7.38 MB on disk, 37,231 logs indexed  |
-|  [💻 ENDPOINT FLEET & EDR]        [OPERATIONAL]  1/3 hosts communicating (heartbeat < 2m), 0 isolated   |
-|  [🎯 MITRE DETECTION ENGINE]      [OPERATIONAL]  5/5 Critical attack modules & regex rules active       |
-|  [🧠 BEHAVIORAL UEBA ENGINE]      [OPERATIONAL]  Dynamic 0-100 risk scoring with multi-factor multipliers|
-|  [🛡️ SOAR ACTIVE DEFENSE]         [OPERATIONAL]  1-Click Quarantine & Firewall Netsh/Iptables Ready     |
-|                                                                                                         |
-+---------------------------------------------------------------------------------------------------------+
-```
-
-- **Live Diagnostic API (`/api/health` & `/health`)**: Executes on-demand database integrity audits (`PRAGMA quick_check;`), journal mode checks (`WAL`), file size on disk, query latency benchmarking, and endpoint agent heartbeat tracking.
-- **Interactive UI Modal**: Instant 1-click diagnostic re-scan (`🔄 Refresh`) without reloading the active investigation workspace or interrupting triage operations.
 
 ---
 
-## 🛡️ Top 5 Most Critical Cyber Attack Use Cases & Advanced Threat Suite
+### Manual Deployment
 
-MiniSOC implements end-to-end telemetry harvesting, real-time correlation, UEBA behavioral risk scoring, and automated SOAR playbooks for the **Top 5 Most Critical Cyber Attack Vectors** encountered in modern enterprise environments:
-
-```
-+---------------------------------------------------------------------------------------------------------+
-|                                    MINISOC TOP 5 ATTACK DEFENSE SUITE                                   |
-+---------------------------------------------------------------------------------------------------------+
-| [1. RANSOMWARE]         VSS Shadow Copy Deletion (T1490)      ==> Host Isolation + Process Term (CRIT)  |
-| [2. CREDENTIAL THEFT]   LSASS Dumping & Pass-the-Hash (T1003) ==> Process Kill + Credential Revoke(HIGH)|
-| [3. LIVING-OFF-THE-LAND]Obfuscated PowerShell / Fileless(T1059)==> AMSI Detection + Script Kill (HIGH)  |
-| [4. C2 & EXFILTRATION]  Beaconing & Bulk Staging (T1071/T1560)==> EDR Local Firewall IP Drop (HIGH)     |
-| [5. ROGUE PERSISTENCE]  Scheduled Tasks & Anti-Forensics(T1053)==> Log Tamper Alert + Group Audit (CRIT)|
-+---------------------------------------------------------------------------------------------------------+
-```
-
-### 1. Ransomware Recovery Inhibition & Shadow Copy Destruction (T1490 / T1486)
-- **The Threat**: Attackers (LockBit, BlackCat, Akira) systematically delete Volume Shadow Copies and disable system recovery mechanisms immediately before executing mass disk encryption.
-- **Signatures & Telemetry**: Event ID 4688 / process telemetry matching `vssadmin delete shadows`, `wmic shadowcopy delete`, `wbadmin delete catalog`, or `bcdedit /set {default} recoveryenabled no`.
-- **UEBA Impact**: **$+50$ pts (CRITICAL)**.
-- **SOAR Automated Response**: **1-Click Host Network Isolation** (enforcing local firewall quarantine) + immediate kill of the offending parent process.
-
-### 2. In-Memory Credential Dumping & Pass-the-Hash (T1003.001 / T1550.002)
-- **The Threat**: Attackers dump cached NTLM hashes from `lsass.exe` memory or replay stolen hashes across the subnet without knowing the user's cleartext password.
-- **Signatures & Telemetry**:
-  - Event ID 4648 (`Logon using explicit alternate credentials`) from non-domain controller endpoints.
-  - CLI executions of `comsvcs.dll, MiniDump`, `mimikatz.exe`, `vaultcmd`, or suspicious `whoami /priv` debugging queries.
-- **UEBA Impact**: **$+45$ pts (HIGH)**.
-- **SOAR Automated Response**: Autonomous process termination (`kill_process`) + alert escalation to SOC Tier 2 for Kerberos/NTLM credential reset.
-
-### 3. Living-off-the-Land (LotL) Obfuscated PowerShell & Fileless Execution (T1059.001 / T1027)
-- **The Threat**: Fileless intrusions evading signature-based antivirus by executing malicious payloads directly inside memory using native Windows binaries (`powershell.exe`, `wscript.exe`, `certutil.exe`).
-- **Signatures & Telemetry**:
-  - **Event ID 4104 (PowerShell Script Block Logging)** capturing de-obfuscated script blocks.
-  - Encoded parameters (`-enc`, `-encodedcommand`), execution policy bypasses (`-ep bypass`), AMSI tampering (`amsiutils`), or memory web cradles (`DownloadString`, `IEX`).
-- **UEBA Impact**: **$+40$ pts (HIGH)**.
-- **SOAR Automated Response**: Immediate PowerShell process termination + quarantine endpoint host.
-
-### 4. Malicious C2 Beaconing & Bulk Data Staging / Exfiltration (T1071.001 / T1560 / T1048)
-- **The Threat**: Compromised endpoints establish recurring command-and-control beacons and compress confidential company assets into encrypted archives prior to data exfiltration.
-- **Signatures & Telemetry**:
-  - Outbound TCP/UDP socket connections targeting known threat actor C2 ports (`:4444`, `:1337`, `:8888`, `:7070`, `:9001`, `:6667`, `:31337`).
-  - Mass command-line archiving utilities (`Compress-Archive`, `tar -czf`, `7z a`, `rar a`) targeting user profiles (`Documents`, `Desktop`, `.aws`, `.ssh`).
-- **UEBA Impact**: **$+40$ pts (HIGH)**.
-- **SOAR Automated Response**: **Endpoint Firewall IP Drop** (`netsh advfirewall` / `iptables` drop pushed directly to endpoint) + host isolation.
-
-### 5. Rogue Persistence via Scheduled Tasks / Services & Admin Privilege Escalation (T1053.005 / T1078.003 / T1070.001)
-- **The Threat**: Threat actors establish persistent access across host reboots by registering rogue scheduled tasks, creating hidden local administrator accounts, and clearing audit logs to cover their tracks.
-- **Signatures & Telemetry**:
-  - **Event ID 4698**: Scheduled task dynamically registered.
-  - **Event ID 4697**: New system service installed.
-  - **Event ID 4720 & 4732**: Local account created and added to the `Administrators` security group.
-  - **Event ID 1102**: The Windows Security audit log was cleared / wiped (Defense Tampering / Anti-Forensics).
-- **UEBA Impact**: **$+45$ to $+50$ pts (HIGH / CRITICAL)**.
-- **SOAR Automated Response**: High-priority alert notification + automated forensic case creation in SOC Incidents table.
-
----
-
-## 🎯 Detection Engineering & MITRE ATT&CK Matrix
-
-| Detection Rule | MITRE Tactic | Technique | Source | Threat Category | Severity |
-|---|---|---|---|---|---|
-| **Ransomware Shadow Copy Deletion** | Impact | **T1490** | Security 4688 / Sysmon | `RANSOMWARE` | `CRITICAL` |
-| **Pass-the-Hash / Explicit Creds** | Lateral Movement | **T1550.002** | Security 4648 | `CREDENTIAL_ACCESS` | `HIGH` |
-| **In-Memory LSASS Dumping** | Credential Access | **T1003.001** | Process / Sysmon 10 | `CREDENTIAL_ACCESS` | `HIGH` |
-| **Brute Force Detection** | Credential Access | **T1110** | Security 4625 | `CREDENTIAL_ACCESS` | `MEDIUM` |
-| **Obfuscated PowerShell / Fileless** | Execution | **T1059.001** | PowerShell 4104 / 4688 | `LIVING_OFF_THE_LAND` | `HIGH` |
-| **Data Staging for Exfiltration** | Collection | **T1560** | Security 4688 | `EXFILTRATION` | `HIGH` |
-| **Malicious Outbound C2 Beaconing** | Command & Control | **T1071.001** | NSM / Sockets | `EXFILTRATION` | `HIGH` |
-| **Rogue Scheduled Task Created** | Persistence | **T1053.005** | Security 4698 | `PERSISTENCE` | `HIGH` |
-| **Windows Audit Log Cleared** | Defense Evasion | **T1070.001** | Security 1102 | `PERSISTENCE` | `CRITICAL` |
-| **Privilege Escalation (Admin Added)**| Privilege Escalation | **T1078.003** | Security 4732 | `PERSISTENCE` | `HIGH` |
-
----
-
-## 🚀 Quickstart Guide
-
-### Option A: Local Development & Public Tunnel
-
-#### 1-Click Launch (Dashboard + Ngrok Public Tunnel):
-```powershell
-.\start_soc.bat
-```
-
-#### Or Run Manually in Separate Terminals:
-```powershell
-# Terminal 1 — Start SOC Dashboard Server:
+#### Step 1: Install Dependencies
+```bash
+python -m venv venv
+# Windows:
 venv\Scripts\activate
+# Linux/macOS:
+source venv/bin/activate
+
+pip install -r requirements.txt
+```
+
+#### Step 2: Configure Environment
+Copy the safe configuration template:
+```bash
+# Windows:
+copy config.example.yaml config.yaml
+
+# Linux/macOS:
+cp config.example.yaml config.yaml
+```
+> 🔒 **Security Notice**: Edit `config.yaml` to set your unique session `secret_key` and add optional Threat Intelligence API keys (VirusTotal, AbuseIPDB, AlienVault OTX, ThreatFox). `config.yaml` is strictly gitignored to protect credentials.
+
+#### Step 3: Launch the Operations Center
+```bash
 python dashboard/app.py
-# Access Web Console at: http://127.0.0.1:5000
-
-# Terminal 2 — Start Ngrok Public Tunnel:
-.\ngrok.exe http --url=underfoot-such-italics.ngrok-free.dev 5000
-# Access Public Tunnel at: https://underfoot-such-italics.ngrok-free.dev
-
-# Terminal 3 — Deploy Endpoint Telemetry Agent (Interactive Mode):
-python agent/endpoint_agent.py http://127.0.0.1:5000/api/v1/telemetry
 ```
-
-#### 🔐 Default SOC Analyst & Admin Access Credentials:
-To access the Operations Center console, authenticate with any of the built-in role profiles:
-
-| User ID / Username | Password | Role / Access Level | Operational Capabilities |
-| :--- | :--- | :--- | :--- |
-| **`admin`** | `minisoc@admin` | **SOC Administrator** | Full fleet policy control, kernel firewall drops, host quarantine, settings |
-| **`analyst`** | `minisoc@analyst` | **Security Analyst** | L1/L2 Alert triage, deep forensic inspection, IOC enrichment, escalation |
-| **`rites`** | `password123` | **Lead SecOps Engineer** | Root administrative access & incident investigation |
-
-### Option B: Persistent Endpoint Agent Deployment (Survives Reboots)
-
-Deploy the agent once on monitored laptops/servers — it automatically runs silently in the background on every power-on without requiring manual intervention:
-
-#### Windows (1-Click or CLI):
-```powershell
-# Automated 1-Click Install (Self-Elevating Admin Rights for Windows Firewall EDR control):
-Double-click agent\install_windows.bat
-# (Prompts for UAC 'Yes' to register with HIGHEST Administrator privileges in Task Scheduler.
-# Automatically connects to the live public MiniSOC server if no custom URL is provided).
-
-# Or run via elevated PowerShell / CMD:
-python agent/endpoint_agent.py --install https://underfoot-such-italics.ngrok-free.dev/api/v1/telemetry
-
-# Check service status or remove:
-python agent/endpoint_agent.py --status
-python agent/endpoint_agent.py --uninstall
-```
-
-#### Linux (Systemd Service):
-```bash
-# Automated 1-Click Install:
-sudo bash agent/install_linux.sh http://YOUR_SERVER_IP:5000/api/v1/telemetry
-
-# Or run via Python:
-sudo python3 agent/endpoint_agent.py --install http://YOUR_SERVER_IP:5000/api/v1/telemetry
-
-# Inspect daemon status:
-systemctl status minisoc-agent.service
-```
-
-#### Android Mobile Devices (Termux):
-Monitor Android smartphones and tablets directly from MiniSOC:
-```bash
-# Inside Termux on Android:
-pkg update && pkg install python git -y
-python endpoint_agent.py http://YOUR_SOC_IP:5000/api/v1/telemetry
-```
-*Monitors Android network sockets (`ss`/`netstat`), active app processes, device architecture, and IP telemetry.*
-
-### Option C: Mobile SOC Console Access (iOS & Android)
-The MiniSOC web dashboard is built on a responsive Bootstrap 5 grid:
-- Open `http://<SOC_LAN_IP>:5000` (e.g. `http://10.0.88.38:5000`) on your phone's browser (Safari / Chrome) while on the same Wi-Fi.
-- For remote access anywhere, connect via your public tunnel / cloud domain (e.g. `https://<domain>.ngrok-free.dev`).
-- **Full On-Call Triage**: Review live incident feeds, ask Nova AI questions, execute 1-click IP blocks, and isolate compromised hosts straight from your phone.
-
-### Option D: 100% Free Cloud Launch via GitHub Codespaces (Zero Setup, $0 Cost)
-
-Run MiniSOC directly on GitHub's cloud infrastructure with zero local installation and zero cost (GitHub includes 60 hours/month free for all accounts with no credit card required):
-
-1. Navigate to **[https://github.com/RITESH-we/mini-soc](https://github.com/RITESH-we/mini-soc)**.
-2. Click **`<> Code`** &rarr; select the **`Codespaces`** tab &rarr; click **`Create codespace on main`**.
-3. GitHub automatically builds the container using `.devcontainer/devcontainer.json`, installs dependencies, and launches the SOC console on port `5000`.
-4. In the **Ports** tab, set Port 5000 visibility to **Public** to access your unique, permanent HTTPS link: `https://<codespace-id>-5000.app.github.dev`.
-
-### Option E: Container Deployment (Docker)
-
-```bash
-# 1-Click Multi-Container Launch
-docker-compose up --build -d
-
-# Verify Container Health
-docker-compose ps
-```
-
-### Option F: Running the Attack Verification Test Suite
-
-Verify that all 5 critical attack use cases, correlation rules, and UEBA risk scoring matrices are functioning at 100%:
-
-```powershell
-python tests/test_top5_attacks.py
-```
-
-*Simulates Ransomware Shadow Copy destruction, Pass-the-Hash / LSASS dumping, Obfuscated PowerShell, C2 beaconing, and rogue persistence with anti-forensics log clearing, verifying zero-error acknowledgment and instant risk escalation.*
+Console is accessible at: **`http://127.0.0.1:5000`**
 
 ---
 
-## 💼 Top 1% Resume Positioning
+## 🔐 Authentication & Role-Based Access Control (RBAC)
 
-```markdown
-- Architected and implemented an enterprise-grade Cloud-Ready SIEM, XDR & UEBA platform synthesizing capabilities from Splunk ES, Microsoft Sentinel, and Exabeam, incorporating OCSF-compliant event normalization and real-time MITRE ATT&CK v14 threat mapping.
-- Implemented an advanced detection suite covering the Top 5 modern attack vectors (Ransomware VSS deletion T1490, Pass-the-Hash T1550, Living-off-the-Land PowerShell T1059, C2 beaconing T1071, and rogue persistence T1053) with automated SOAR isolation playbooks.
-- Engineered a zero-dependency endpoint agent featuring native Windows Event XML parsing (wevtutil/EVTX) and transactional At-Least-Once delivery watermarks, eliminating telemetry loss during network drops and preventing duplicate alert generation.
-- Designed a behavioral User & Entity Behavior Analytics (UEBA) engine dynamically calculating host/user risk scores (0-100) based on authentication anomalies, privilege tampering, and unauthorized tool execution.
-- Developed integrated SOAR response playbooks enabling 1-click endpoint network isolation and automated Host-based IPS (HIPS) firewall drops with RFC 1918 loopback fail-safes.
-- Containerized the platform using multi-stage Docker builds for cloud-native deployment across AWS ECS, GCP Cloud Run, and on-premises environments.
-```
+TRISHULA features role-based access control with timing-safe SHA-256 password hashing.
+
+| Role Profile | Access Level | Operational Capabilities |
+| :--- | :--- | :--- |
+| **`admin`** | **SOC Administrator** | Full fleet policy control, firewall containment drops, host quarantine, settings |
+| **`analyst`** | **Security Analyst** | L1/L2 Alert triage, deep forensic inspection, IOC enrichment, incident escalation |
+
+> ⚠️ **IMPORTANT**: On first deployment, authenticate using the initial credentials initialized during database setup and **immediately navigate to settings or database management to rotate your passwords**.
 
 ---
 
-## 💼 Commercial Use, Enterprise Pitches & Licensing Rights
+## 📡 Deploying the TRISHULA Endpoint Agent
 
-MiniSOC is released under the **MIT License** with explicit permissions granted for commercial client presentations, enterprise evaluations, and professional service deployments:
+The endpoint agent is lightweight, cross-platform, and zero-dependency.
 
-- **Client Pitching & Demonstrations**: Fully authorized for commercial presentations, RFP technical evaluations, and venture/client pitches.
-- **Enterprise Deployment**: Permitted for production usage across commercial cloud, on-premise, and hybrid environments.
-- **MSSP & SOC-as-a-Service**: Can be utilized as the operational detection engine for Managed Security Service Providers without royalty or per-seat fees.
-- **Zero Mock / 100% Real Architecture**: Every metric, process, network socket, and security event rendered on the dashboard is grounded in real OS kernel telemetry, live database states, and verified threat intelligence feeds.
+### Interactive Mode (Testing & Audits):
+```powershell
+python agent/endpoint_agent.py http://<YOUR_SOC_SERVER_IP>:5000/api/v1/telemetry --profile audit_friend
+```
 
-See the complete terms in **[LICENSE](LICENSE)**.
+### Agent Policy Profiles:
+* **`audit_friend` (Safe Telemetry Mode)**: Full log harvesting and event shipping; automatically suppresses disruptive actions (no automated firewall drops or process kills on friend/colleague laptops).
+* **`standard_workstation` (Balanced EDR)**: Standard 15-second heartbeat with automated malware and ransomware containment drops.
+* **`high_security_server` (Maximum Vigilance)**: Accelerated 5-second heartbeat, strict network surveillance, and immediate host quarantine upon critical detection.
+
+### Persistent Daemon (Survives Reboots):
+* **Windows**: Double-click `agent\install_windows.bat` (Registers elevated background scheduled task).
+* **Linux**: `sudo bash agent/install_linux.sh http://<YOUR_SOC_SERVER_IP>:5000/api/v1/telemetry` (Registers systemd daemon).
+
+---
+
+## 🎯 Threat Hunting Playbooks (`/hunting`)
+
+Execute proactive, hypothesis-driven hunts across live endpoint telemetry tables without waiting for static alerts:
+
+1. **LOLBins & Script Interpreters (T1059)**: PowerShell, Certutil, MSHTA, Bitsadmin, Wscript, Curl, Rundll32.
+2. **Anomalous Outbound Ports (T1071 / T1021)**: Sockets bound to non-standard or lateral movement ports (`4444, 1337, 8888, 445, 3389, 5985, 22`).
+3. **Host Reconnaissance (T1087 / T1082)**: Discovery commands (`whoami, net user, tasklist, ipconfig, nltest`).
+4. **Authentication Anomalies (T1110)**: Aggregates failed logon attempts (`Event ID 4625`) across all workstations.
+5. **Process Masquerading (T1036)**: System binaries executing from user directories or Temp folders.
+6. **Autorun Persistence (T1547 / T1053)**: Windows Run keys, startup files, new services (`7045`), and scheduled tasks (`4698`).
+7. **DNS Tunneling & DGA (T1071.004)**: High-entropy subdomains and deep nesting.
+8. **Honey-Token Deception Traps (T1081)**: Audits accesses and tampering against planted canary files.
+
+---
+
+## 🧪 Automated Testing & Verification
+
+TRISHULA is continuously verified by an automated test suite integrated into GitHub Actions CI:
+
+```powershell
+# Run Multi-Vector & Anti-Evasion Test Suite:
+python scripts/test_anti_evasion.py
+
+# Run Flask Route & Auth Smoke Tests:
+python scripts/ci_smoke_test.py
+```
 
 ---
 
 ## 📜 License
-This project is licensed under the MIT License with Commercial & Enterprise Pitch Permissions - see the [LICENSE](LICENSE) file for details.
-
+This project is licensed under the **MIT License** — see the [LICENSE](LICENSE) file for details.
