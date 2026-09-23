@@ -3,10 +3,13 @@
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
   <div>
-    <h4 class="mb-0 text-info">Incident Investigation Tracker</h4>
-    <span class="text-muted small">Active security cases, autonomous AI root-cause analysis &amp; NIST IR reporting</span>
+    <h4 class="mb-0 text-light fw-bold font-mono d-flex align-items-center gap-2" style="font-size: 1.15rem;">
+      <i class="bi bi-archive text-info"></i>
+      <span>INCIDENT INVESTIGATION TRACKER</span>
+    </h4>
+    <span class="text-muted small">Active security cases, autonomous AI root-cause analysis &amp; NIST SP 800-61 reporting</span>
   </div>
-  <a href="/incidents/new" class="btn btn-sm btn-primary">+ New Incident</a>
+  <a href="/incidents/new" class="btn btn-sm btn-info text-dark fw-semibold font-mono py-1 px-3" style="font-size: 0.76rem;"><i class="bi bi-plus-lg me-1"></i>New Incident</a>
 </div>
 
 <div class="card mb-4">
@@ -18,25 +21,25 @@
       <tbody>
       {% for i in incidents %}
       <tr>
-        <td class="text-muted">#{{ i.id }}</td>
-        <td class="fw-bold">{{ i.title }}</td>
-        <td><span class="badge badge-{{ i.severity }}">{{ i.severity }}</span></td>
+        <td class="text-muted font-mono">#{{ i.id }}</td>
+        <td class="fw-semibold text-light">{{ i.title }}</td>
+        <td><span class="badge badge-{{ i.severity }} font-mono" style="font-size: 0.7rem;">{{ i.severity }}</span></td>
         <td>
-          <span class="badge {% if i.status=='OPEN' %}bg-danger{% elif i.status=='INVESTIGATING' %}bg-warning text-dark{% else %}bg-success{% endif %}">
+          <span class="badge font-mono {% if i.status=='OPEN' %}badge-CRITICAL{% elif i.status=='INVESTIGATING' %}badge-HIGH{% else %}badge-LOW{% endif %}" style="font-size: 0.68rem;">
             {{ i.status }}
           </span>
         </td>
-        <td>{{ i.analyst }}</td>
-        <td class="text-muted small">{{ i.created_at[:16] if i.created_at else '-' }}</td>
+        <td class="font-mono small text-info">{{ i.analyst }}</td>
+        <td class="text-muted small font-mono">{{ i.created_at[:16] if i.created_at else '-' }}</td>
         <td>
-          <button class="btn btn-sm btn-outline-warning me-1" onclick="fetchRCA({{ i.id }})">🤖 Nova RCA</button>
-          <a href="/incidents/{{ i.id }}/report" class="btn btn-sm btn-outline-info me-1" target="_blank">📄 PDF Report</a>
+          <button class="btn btn-sm btn-outline-warning py-0.5 px-2 font-mono me-1" style="font-size: 0.72rem;" onclick="fetchRCA({{ i.id }})"><i class="bi bi-stars me-1"></i>Nova RCA</button>
+          <a href="/incidents/{{ i.id }}/report" class="btn btn-sm btn-outline-info py-0.5 px-2 font-mono me-1" style="font-size: 0.72rem;" target="_blank"><i class="bi bi-file-earmark-pdf me-1"></i>NIST Report</a>
           {% if i.status != 'CLOSED' %}
           <form method="POST" action="/incidents/{{ i.id }}/close" style="display:inline">
-            <button class="btn btn-sm btn-outline-success">Close</button>
+            <button class="btn btn-sm btn-outline-success py-0.5 px-2 font-mono" style="font-size: 0.72rem;"><i class="bi bi-check-lg me-1"></i>Close</button>
           </form>
           {% else %}
-          <span class="text-muted small">Closed</span>
+          <span class="text-muted small font-mono">Closed</span>
           {% endif %}
         </td>
       </tr>

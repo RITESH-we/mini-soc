@@ -43,53 +43,53 @@
             <td><span class="badge bg-info">v{{ ep.agent_version }}</span></td>
             <td>
               <div class="dropdown">
-                <button class="btn btn-xs py-0 px-2 dropdown-toggle {% if ep.profile == 'high_security_server' %}btn-outline-danger{% elif ep.profile == 'audit_friend' %}btn-outline-warning{% else %}btn-outline-info{% endif %}" type="button" data-bs-toggle="dropdown" title="Click to change policy profile">
+                <button class="btn btn-xs py-0.5 px-2 dropdown-toggle font-mono {% if ep.profile == 'high_security_server' %}btn-outline-danger{% elif ep.profile == 'audit_friend' %}btn-outline-warning{% else %}btn-outline-info{% endif %}" style="font-size: 0.72rem;" type="button" data-bs-toggle="dropdown" title="Click to change policy profile">
                   {% if ep.profile == 'high_security_server' %}
-                    🛡️ Server (Strict)
+                    <i class="bi bi-shield-lock me-1"></i>Server (Strict)
                   {% elif ep.profile == 'audit_friend' %}
-                    🤝 Friend / Safe
+                    <i class="bi bi-shield-check me-1"></i>Friend / Safe
                   {% else %}
-                    💻 Workstation
+                    <i class="bi bi-pc-display me-1"></i>Workstation
                   {% endif %}
                 </button>
-                <ul class="dropdown-menu dropdown-menu-dark small shadow">
-                  <li><h6 class="dropdown-header text-muted">Select Security Profile</h6></li>
-                  <li><a class="dropdown-item {% if ep.profile == 'standard_workstation' or not ep.profile %}active{% endif %}" href="javascript:void(0)" onclick="setEndpointProfile('{{ ep.hostname }}', 'standard_workstation')">💻 Workstation (Standard EDR - 15s)</a></li>
-                  <li><a class="dropdown-item {% if ep.profile == 'high_security_server' %}active{% endif %}" href="javascript:void(0)" onclick="setEndpointProfile('{{ ep.hostname }}', 'high_security_server')">🛡️ Server (High-Security / 5s / Auto-Block)</a></li>
-                  <li><a class="dropdown-item {% if ep.profile == 'audit_friend' %}active{% endif %}" href="javascript:void(0)" onclick="setEndpointProfile('{{ ep.hostname }}', 'audit_friend')">🤝 Friend / BYOD (Safe Audit Mode - No Disruption)</a></li>
+                <ul class="dropdown-menu dropdown-menu-dark small shadow font-mono" style="font-size: 0.75rem;">
+                  <li><h6 class="dropdown-header text-muted">SELECT POLICY PROFILE</h6></li>
+                  <li><a class="dropdown-item {% if ep.profile == 'standard_workstation' or not ep.profile %}active{% endif %}" href="javascript:void(0)" onclick="setEndpointProfile('{{ ep.hostname }}', 'standard_workstation')"><i class="bi bi-pc-display me-1 text-info"></i> Workstation (Standard EDR - 15s)</a></li>
+                  <li><a class="dropdown-item {% if ep.profile == 'high_security_server' %}active{% endif %}" href="javascript:void(0)" onclick="setEndpointProfile('{{ ep.hostname }}', 'high_security_server')"><i class="bi bi-shield-lock me-1 text-danger"></i> Server (High-Security / 5s / Auto-Block)</a></li>
+                  <li><a class="dropdown-item {% if ep.profile == 'audit_friend' %}active{% endif %}" href="javascript:void(0)" onclick="setEndpointProfile('{{ ep.hostname }}', 'audit_friend')"><i class="bi bi-shield-check me-1 text-warning"></i> Friend / BYOD (Safe Audit Mode - No Disruption)</a></li>
                 </ul>
               </div>
             </td>
-            <td class="text-muted small">{{ ep.last_heartbeat[:19] }}</td>
+            <td class="text-muted font-mono small">{{ ep.last_heartbeat[:19] }}</td>
             <td>
               {% if ep.status == 'ISOLATED' %}
-              <span class="badge bg-danger">🚨 ISOLATED</span>
+              <span class="badge badge-CRITICAL font-mono" style="font-size: 0.68rem;"><i class="bi bi-slash-circle me-1"></i>ISOLATED</span>
               {% else %}
-              <span class="badge bg-success">ONLINE</span>
+              <span class="badge badge-LOW font-mono" style="font-size: 0.68rem;"><i class="bi bi-check-circle me-1"></i>ONLINE</span>
               {% endif %}
             </td>
             <td>
               {% if ep.risk_score >= 70 %}
-              <span class="badge bg-danger">{{ ep.risk_score }}/100 CRITICAL</span>
+              <span class="badge badge-CRITICAL font-mono" style="font-size: 0.68rem;">{{ ep.risk_score }}/100 CRIT</span>
               {% elif ep.risk_score >= 40 %}
-              <span class="badge bg-warning text-dark">{{ ep.risk_score }}/100 HIGH</span>
+              <span class="badge badge-HIGH font-mono" style="font-size: 0.68rem;">{{ ep.risk_score }}/100 HIGH</span>
               {% elif ep.risk_score >= 20 %}
-              <span class="badge bg-info text-dark">{{ ep.risk_score }}/100 MED</span>
+              <span class="badge badge-MEDIUM font-mono" style="font-size: 0.68rem;">{{ ep.risk_score }}/100 MED</span>
               {% else %}
-              <span class="badge bg-success">{{ ep.risk_score|default(0, true) }}/100 LOW</span>
+              <span class="badge badge-LOW font-mono" style="font-size: 0.68rem;">{{ ep.risk_score|default(0, true) }}/100 LOW</span>
               {% endif %}
             </td>
             <td>
-              <button class="btn btn-sm btn-outline-info btn-enrich py-1 me-1" onclick="viewEndpointLogs('{{ ep.hostname }}')">
-                🔍 View Live Logs
+              <button class="btn btn-sm btn-outline-info py-0.5 px-2 font-mono me-1" style="font-size: 0.72rem;" onclick="viewEndpointLogs('{{ ep.hostname }}')">
+                <i class="bi bi-terminal"></i> Telemetry
               </button>
               {% if ep.status == 'ISOLATED' %}
-              <button class="btn btn-sm btn-success btn-enrich py-1" onclick="restoreHost('{{ ep.hostname }}')">
-                🔓 Restore
+              <button class="btn btn-sm btn-success py-0.5 px-2 font-mono" style="font-size: 0.72rem;" onclick="restoreHost('{{ ep.hostname }}')">
+                <i class="bi bi-unlock"></i> Restore
               </button>
               {% else %}
-              <button class="btn btn-sm btn-danger btn-enrich py-1" onclick="isolateHost('{{ ep.hostname }}')">
-                🛡️ Isolate
+              <button class="btn btn-sm btn-outline-danger py-0.5 px-2 font-mono" style="font-size: 0.72rem;" onclick="isolateHost('{{ ep.hostname }}')">
+                <i class="bi bi-slash-circle"></i> Isolate
               </button>
               {% endif %}
             </td>
@@ -113,19 +113,19 @@
   <div class="modal-dialog modal-xl">
     <div class="modal-content bg-dark border-info text-light">
       <div class="modal-header border-secondary">
-        <h5 class="modal-title text-info" id="logModalTitle">🔍 Remote Host Telemetry: <span id="modalHostName">-</span></h5>
+        <h5 class="modal-title text-info font-mono" id="logModalTitle"><i class="bi bi-terminal me-1.5"></i>Remote Host Telemetry: <span id="modalHostName">-</span></h5>
         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body">
-        <ul class="nav nav-tabs border-secondary mb-3" id="logTabs">
+        <ul class="nav nav-tabs border-secondary mb-3 font-mono" id="logTabs" style="font-size: 0.8rem;">
           <li class="nav-item">
-            <button class="nav-link active bg-transparent text-info border-secondary" data-bs-toggle="tab" data-bs-target="#tab-procs">💻 Running Processes</button>
+            <button class="nav-link active bg-transparent text-info border-secondary" data-bs-toggle="tab" data-bs-target="#tab-procs"><i class="bi bi-cpu me-1"></i>Running Processes</button>
           </li>
           <li class="nav-item">
-            <button class="nav-link bg-transparent text-info border-secondary" data-bs-toggle="tab" data-bs-target="#tab-conns">🌐 Network Sockets</button>
+            <button class="nav-link bg-transparent text-info border-secondary" data-bs-toggle="tab" data-bs-target="#tab-conns"><i class="bi bi-diagram-2 me-1"></i>Network Sockets</button>
           </li>
           <li class="nav-item">
-            <button class="nav-link bg-transparent text-info border-secondary" data-bs-toggle="tab" data-bs-target="#tab-security">📜 Security Audit Logs</button>
+            <button class="nav-link bg-transparent text-info border-secondary" data-bs-toggle="tab" data-bs-target="#tab-security"><i class="bi bi-shield-check me-1"></i>Security Audit Logs</button>
           </li>
         </ul>
 
@@ -186,8 +186,8 @@
         </div>
       </div>
       <div class="modal-footer border-secondary">
-        <button class="btn btn-sm btn-outline-info" onclick="refreshCurrentLogs()">🔄 Refresh Telemetry</button>
-        <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Close</button>
+        <button class="btn btn-sm btn-outline-info font-mono py-1 px-3" style="font-size: 0.76rem;" onclick="refreshCurrentLogs()"><i class="bi bi-arrow-repeat me-1"></i>Refresh Telemetry</button>
+        <button type="button" class="btn btn-sm btn-secondary py-1 px-3 font-mono" style="font-size: 0.76rem;" data-bs-dismiss="modal">Close</button>
       </div>
     </div>
   </div>
@@ -195,28 +195,28 @@
 
 <!-- Deployment Runbook -->
 <div class="card">
-  <div class="card-header bg-dark text-light border-secondary d-flex justify-content-between align-items-center">
-    <span><strong>🚀 Endpoint Agent Deployment &amp; Persistence</strong></span>
-    <span class="badge bg-success">Cross-Platform (Windows &amp; Linux)</span>
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <span><i class="bi bi-terminal-split text-info me-1.5"></i><strong>Endpoint Agent Deployment &amp; Persistence</strong></span>
+    <span class="badge font-mono border border-success border-opacity-40 text-success" style="background: rgba(16, 185, 129, 0.08); font-size: 0.68rem;">Cross-Platform (Windows &amp; Linux)</span>
   </div>
   <div class="card-body">
     <div class="row g-3">
       <div class="col-md-6">
-        <h6 class="small text-info fw-bold mb-1">⚡ Option 1: One-Click Persistent Service (Auto-Starts on Reboot)</h6>
-        <p class="small text-muted mb-2">Installs as a background service/startup runner. Runs silently in the background without needing to be started again after laptop power-off:</p>
-        <div class="bg-black p-2 rounded font-monospace small text-success border border-secondary mb-2">
+        <h6 class="small text-info fw-semibold mb-1 font-mono"><i class="bi bi-gear-wide-connected me-1"></i>Option 1: One-Click Persistent Daemon (Auto-Starts on Boot)</h6>
+        <p class="small text-muted mb-2">Registers as a background service/scheduled task. Survives machine reboots without manual intervention:</p>
+        <div class="p-2 rounded font-mono small text-success border mb-2" style="background: rgba(0,0,0,0.4); border-color: var(--border-subtle) !important;">
           python endpoint_agent.py --install
         </div>
-        <span class="text-muted" style="font-size:0.75rem;">To uninstall: <code>python endpoint_agent.py --uninstall</code></span>
+        <span class="text-muted font-mono" style="font-size:0.72rem;">To uninstall: <code>python endpoint_agent.py --uninstall</code></span>
       </div>
       
       <div class="col-md-6">
-        <h6 class="small text-warning fw-bold mb-1">▶️ Option 2: Interactive Terminal Mode</h6>
-        <p class="small text-muted mb-2">Run directly in an open console for interactive testing and real-time terminal stdout debugging:</p>
-        <div class="bg-black p-2 rounded font-monospace small text-warning border border-secondary mb-2">
+        <h6 class="small text-warning fw-semibold mb-1 font-mono"><i class="bi bi-play-circle me-1"></i>Option 2: Interactive Terminal Mode</h6>
+        <p class="small text-muted mb-2">Execute directly in an active console for real-time terminal diagnostics and rapid triage:</p>
+        <div class="p-2 rounded font-mono small text-warning border mb-2" style="background: rgba(0,0,0,0.4); border-color: var(--border-subtle) !important;">
           python endpoint_agent.py
         </div>
-        <span class="text-muted" style="font-size:0.75rem;">Ships processes, socket connections, and Windows audit logs every 15s.</span>
+        <span class="text-muted font-mono" style="font-size:0.72rem;">Streams processes, network sockets, and security event logs every 15s.</span>
       </div>
     </div>
   </div>

@@ -1,105 +1,104 @@
 {% extends "base.html" %}
-{% block title %}Enterprise Operations Center{% endblock %}
+{% block title %}Security Operations Command{% endblock %}
 {% block content %}
 
 <!-- Operations Center Header -->
-<div class="card mb-4 border-info">
-  <div class="card-body py-3 px-4 d-flex flex-wrap justify-content-between align-items-center bg-dark rounded">
-    <div class="d-flex align-items-center gap-3 my-1">
-      <div>
-        <h5 class="mb-0 text-info fw-bold d-flex align-items-center gap-2">
-          <span>🛡️ MiniSOC Operations Center</span>
-          <span class="badge bg-primary text-light fs-6 fw-normal">Enterprise v2.2</span>
-        </h5>
-        <span class="text-muted small">Autonomous SIEM, Behavioral UEBA &amp; Real-Time Active Defense</span>
+<div class="card mb-3 border-0" style="background: linear-gradient(135deg, rgba(16, 24, 40, 0.95) 0%, rgba(13, 18, 29, 0.95) 100%);">
+  <div class="card-body py-2.5 px-3 px-md-4 d-flex flex-wrap justify-content-between align-items-center gap-2">
+    <div class="d-flex align-items-center gap-2.5">
+      <div class="d-flex flex-column">
+        <div class="d-flex align-items-center gap-2">
+          <h6 class="mb-0 fw-bold text-light font-mono" style="letter-spacing: 0.04em;">TRISHULA // THREAT TELEMETRY &amp; DETECTION FABRIC</h6>
+          <span class="badge font-mono border" style="background: rgba(56, 189, 248, 0.08); border-color: rgba(56, 189, 248, 0.25) !important; color: #38bdf8; font-size: 0.65rem;">ACTIVE INGESTION</span>
+        </div>
+        <span class="text-muted" style="font-size: 0.74rem;">Real-Time MITRE ATT&amp;CK Correlator &middot; Behavioral UEBA &middot; Automated SOAR Containment</span>
       </div>
     </div>
     
     <!-- Quick Status & Actions -->
-    <div class="d-flex align-items-center gap-2 my-1">
-      <span id="realtime-badge" class="badge bg-dark border border-success text-success d-flex align-items-center py-2 px-3 small">
-        <span class="pulse-dot"></span> Real-Time Live Sync Active
+    <div class="d-flex align-items-center gap-2">
+      <span id="realtime-badge" class="badge font-mono border border-success border-opacity-40 text-success d-flex align-items-center py-1 px-2.5" style="background: rgba(16, 185, 129, 0.08); font-size: 0.72rem;">
+        <span class="pulse-dot"></span> FLEET SYNC: ONLINE
       </span>
-      <a href="/hunting" class="btn btn-sm btn-outline-warning d-flex align-items-center gap-1">
-        <span>🎯</span>
-        <span>Threat Hunting</span>
+      <a href="/hunting" class="btn btn-sm btn-outline-warning d-flex align-items-center gap-1.5 py-1 px-2.5" style="font-size: 0.76rem;">
+        <i class="bi bi-crosshair"></i> Threat Hunting
       </a>
-      <button class="btn btn-sm btn-outline-success" onclick="updateRealtimeMetrics(true)">
-        <span>🔄 Refresh</span>
+      <button class="btn btn-sm btn-outline-secondary py-1 px-2.5" style="font-size: 0.76rem;" onclick="updateRealtimeMetrics(true)">
+        <i class="bi bi-arrow-repeat"></i> Sync
       </button>
     </div>
   </div>
 </div>
 
 <!-- Core SOC L1 Metric Cards -->
-<div class="row mb-4 g-3">
-  <div class="col-md-3 col-sm-6">
+<div class="row mb-3 g-2.5">
+  <div class="col-lg-3 col-sm-6">
     <div class="card stat-card critical h-100">
-      <div class="card-body">
+      <div class="card-body p-3">
         <div class="d-flex justify-content-between align-items-center mb-1">
-          <span class="text-muted small text-uppercase fw-bold">Critical &amp; High Threats</span>
-          <span class="fs-4">🚨</span>
+          <span class="text-muted text-uppercase fw-semibold" style="font-size: 0.7rem; letter-spacing: 0.06em;">Critical &amp; High Threats</span>
+          <i class="bi bi-shield-fill-exclamation text-danger fs-5 opacity-75"></i>
         </div>
-        <div id="metric-critical-high" class="fs-2 fw-bold text-danger">{{ critical_high }}</div>
-        <div class="small text-muted">Immediate triage required (<span id="metric-open-alerts">{{ open_alerts }}</span> total open)</div>
+        <div id="metric-critical-high" class="stat-num text-danger font-mono">{{ critical_high }}</div>
+        <div class="text-muted font-mono" style="font-size: 0.73rem;">Immediate triage required (<span id="metric-open-alerts">{{ open_alerts }}</span> open)</div>
       </div>
     </div>
   </div>
   
-  <div class="col-md-3 col-sm-6">
+  <div class="col-lg-3 col-sm-6">
     <div class="card stat-card h-100">
-      <div class="card-body">
+      <div class="card-body p-3">
         <div class="d-flex justify-content-between align-items-center mb-1">
-          <span class="text-muted small text-uppercase fw-bold">Monitored Fleet Health</span>
-          <span class="fs-4">💻</span>
+          <span class="text-muted text-uppercase fw-semibold" style="font-size: 0.7rem; letter-spacing: 0.06em;">Monitored Fleet Health</span>
+          <i class="bi bi-pc-display-horizontal text-info fs-5 opacity-75"></i>
         </div>
-        <div id="metric-fleet-health" class="fs-2 fw-bold text-info">{{ online_endpoints }} / {{ total_endpoints }}</div>
-        <div class="small text-muted" id="metric-fleet-status">
+        <div id="metric-fleet-health" class="stat-num text-info font-mono">{{ online_endpoints }} / {{ total_endpoints }}</div>
+        <div class="font-mono" style="font-size: 0.73rem;" id="metric-fleet-status">
           {% if isolated_endpoints > 0 %}
-          <span class="text-danger fw-bold">⚠️ {{ isolated_endpoints }} host(s) quarantined</span>
+          <span class="text-danger fw-semibold"><i class="bi bi-exclamation-triangle-fill me-1"></i>{{ isolated_endpoints }} host(s) quarantined</span>
           {% else %}
-          <span class="text-success">● 100% Endpoints nominal</span>
+          <span class="text-success"><i class="bi bi-check-circle-fill me-1"></i>100% Endpoints nominal</span>
           {% endif %}
         </div>
       </div>
     </div>
   </div>
   
-  <div class="col-md-3 col-sm-6">
+  <div class="col-lg-3 col-sm-6">
     <div class="card stat-card warning h-100">
-      <div class="card-body">
+      <div class="card-body p-3">
         <div class="d-flex justify-content-between align-items-center mb-1">
-          <span class="text-muted small text-uppercase fw-bold">Active Firewall Blocks</span>
-          <span class="fs-4">🛡️</span>
+          <span class="text-muted text-uppercase fw-semibold" style="font-size: 0.7rem; letter-spacing: 0.06em;">Active Firewall Containment</span>
+          <i class="bi bi-shield-slash-fill text-warning fs-5 opacity-75"></i>
         </div>
-        <div id="metric-blocked-ips" class="fs-2 fw-bold text-warning">{{ blocked_ips_count }}</div>
-        <div class="small text-muted">Host firewall IPS containment drops</div>
+        <div id="metric-blocked-ips" class="stat-num text-warning font-mono">{{ blocked_ips_count }}</div>
+        <div class="text-muted font-mono" style="font-size: 0.73rem;">Automated HIPS containment drops</div>
       </div>
     </div>
   </div>
   
-  <div class="col-md-3 col-sm-6">
+  <div class="col-lg-3 col-sm-6">
     <div class="card stat-card success h-100">
-      <div class="card-body">
+      <div class="card-body p-3">
         <div class="d-flex justify-content-between align-items-center mb-1">
-          <span class="text-muted small text-uppercase fw-bold">Active Investigations</span>
-          <span class="fs-4">📁</span>
+          <span class="text-muted text-uppercase fw-semibold" style="font-size: 0.7rem; letter-spacing: 0.06em;">Active Investigations</span>
+          <i class="bi bi-journal-check text-success fs-5 opacity-75"></i>
         </div>
-        <div id="metric-open-inc" class="fs-2 fw-bold text-success">{{ open_inc }}</div>
-        <div class="small text-muted">Formal escalated security cases</div>
+        <div id="metric-open-inc" class="stat-num text-success font-mono">{{ open_inc }}</div>
+        <div class="text-muted font-mono" style="font-size: 0.73rem;">Formal escalated security cases</div>
       </div>
     </div>
   </div>
 </div>
 
 <!-- Visual Analytics & UEBA Behavioral Risk Section -->
-<div class="row mb-4 g-3">
+<div class="row mb-3 g-2.5">
   <!-- Severity Chart -->
   <div class="col-lg-3 col-md-6">
     <div class="card h-100">
       <div class="card-header d-flex justify-content-between align-items-center">
-        <span><strong>Threat Severity</strong></span>
-        <span class="badge bg-secondary">Real-Time</span>
+        <span class="d-flex align-items-center gap-1.5"><i class="bi bi-pie-chart text-info"></i> Threat Severity</span>
+        <span class="badge font-mono border" style="background: rgba(255,255,255,0.03); border-color: var(--border-subtle); color: #94a3b8; font-size: 0.65rem;">REAL-TIME</span>
       </div>
       <div class="card-body d-flex align-items-center justify-content-center p-3">
         <canvas id="sevChart" height="190"></canvas>
@@ -111,8 +110,8 @@
   <div class="col-lg-5 col-md-6">
     <div class="card h-100">
       <div class="card-header d-flex justify-content-between align-items-center">
-        <span><strong>MITRE ATT&amp;CK Tactic Coverage</strong></span>
-        <span class="badge bg-primary">v14 Framework</span>
+        <span class="d-flex align-items-center gap-1.5"><i class="bi bi-bar-chart-steps text-info"></i> MITRE ATT&amp;CK Tactic Coverage</span>
+        <span class="badge font-mono border" style="background: rgba(56,189,248,0.08); border-color: rgba(56,189,248,0.25); color: #38bdf8; font-size: 0.65rem;">v14 MATRIX</span>
       </div>
       <div class="card-body p-3">
         <canvas id="mitreChart" height="190"></canvas>
@@ -120,54 +119,54 @@
     </div>
   </div>
 
-  <!-- Behavioral UEBA Risk Widget (Exabeam & Securonix Inspiration) -->
+  <!-- Behavioral UEBA Risk Widget -->
   <div class="col-lg-4 col-md-12">
     <div class="card h-100">
       <div class="card-header d-flex justify-content-between align-items-center">
-        <span><strong>👤 UEBA Behavioral Risk</strong></span>
-        <span class="badge bg-purple" style="background-color: #8b5cf6; color: white;">Dynamic Scoring</span>
+        <span class="d-flex align-items-center gap-1.5"><i class="bi bi-cpu text-info"></i> UEBA Behavioral Risk</span>
+        <span class="badge font-mono border" style="background: rgba(139, 92, 246, 0.12); border-color: rgba(139, 92, 246, 0.3); color: #c4b5fd; font-size: 0.65rem;">DYNAMIC SCORING</span>
       </div>
       <div class="card-body p-0">
         <div class="list-group list-group-flush">
           {% for r in top_risks %}
-          <div class="list-group-item bg-transparent text-light border-secondary py-2 px-3">
+          <div class="list-group-item bg-transparent text-light py-2 px-3" style="border-bottom: 1px solid var(--border-subtle);">
             <div class="d-flex justify-content-between align-items-center mb-1">
               <div>
-                <span class="fw-bold font-monospace text-info">{{ r.entity_id }}</span>
-                <span class="badge bg-dark border border-secondary text-muted ms-1" style="font-size:0.7rem;">{{ r.entity_type }}</span>
+                <span class="fw-semibold font-mono text-info" style="font-size: 0.8rem;">{{ r.entity_id }}</span>
+                <span class="badge font-mono border text-muted ms-1" style="background: rgba(255,255,255,0.03); border-color: var(--border-subtle); font-size:0.65rem;">{{ r.entity_type }}</span>
               </div>
               <div>
                 {% if r.risk_score >= 70 %}
-                <span class="badge bg-danger">{{ r.risk_score }}/100 CRITICAL</span>
+                <span class="badge badge-CRITICAL font-mono" style="font-size: 0.68rem;">{{ r.risk_score }}/100 CRIT</span>
                 {% elif r.risk_score >= 40 %}
-                <span class="badge bg-warning text-dark">{{ r.risk_score }}/100 HIGH</span>
+                <span class="badge badge-HIGH font-mono" style="font-size: 0.68rem;">{{ r.risk_score }}/100 HIGH</span>
                 {% elif r.risk_score >= 20 %}
-                <span class="badge bg-info text-dark">{{ r.risk_score }}/100 MED</span>
+                <span class="badge badge-MEDIUM font-mono" style="font-size: 0.68rem;">{{ r.risk_score }}/100 MED</span>
                 {% else %}
-                <span class="badge bg-success">{{ r.risk_score }}/100 LOW</span>
+                <span class="badge badge-LOW font-mono" style="font-size: 0.68rem;">{{ r.risk_score }}/100 LOW</span>
                 {% endif %}
               </div>
             </div>
-            <div class="progress mb-1" style="height: 4px;">
+            <div class="progress mb-1" style="height: 3px; background: rgba(255,255,255,0.05);">
               <div class="progress-bar {% if r.risk_score >= 70 %}bg-danger{% elif r.risk_score >= 40 %}bg-warning{% else %}bg-info{% endif %}" role="progressbar" style="width: {{ r.risk_score }}%;"></div>
             </div>
-            <div class="small text-muted" style="font-size: 0.75rem;">
+            <div class="text-muted font-mono" style="font-size: 0.7rem;">
               {% if r.factors and r.factors|length > 0 %}
               Factor: {{ r.factors[0].rule }} (+{{ r.factors[0].points }} pts)
               {% else %}
-              Activity nominal within 24h window
+              Activity nominal within baseline window
               {% endif %}
             </div>
           </div>
           {% else %}
-          <div class="p-3 text-center text-muted small">
-            No high-risk entities detected. Baselines nominal.
+          <div class="p-3 text-center text-muted font-mono small">
+            No anomalous entities detected. Fleet baselines nominal.
           </div>
           {% endfor %}
         </div>
       </div>
-      <div class="card-footer bg-transparent border-secondary text-center py-2">
-        <a href="/agents" class="small text-info text-decoration-none">Inspect All Fleet Entities &rarr;</a>
+      <div class="card-footer bg-transparent py-2 text-center" style="border-top: 1px solid var(--border-subtle);">
+        <a href="/agents" class="small text-info text-decoration-none font-mono" style="font-size: 0.74rem;">Inspect Fleet Entities &rarr;</a>
       </div>
     </div>
   </div>
@@ -177,22 +176,25 @@
 <div class="card">
   <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
     <div class="d-flex align-items-center gap-2">
-      <strong>🚨 Live Ingestion &amp; Detection Stream</strong>
-      <span class="badge bg-info">Auto-Refreshes</span>
+      <span class="d-flex align-items-center gap-1.5"><i class="bi bi-activity text-info"></i> Live Telemetry Ingestion &amp; Detection Stream</span>
+      <span class="badge font-mono border" style="background: rgba(56,189,248,0.08); border-color: rgba(56,189,248,0.25); color: #38bdf8; font-size: 0.65rem;">STREAMING</span>
     </div>
     
     <!-- Quick Filters -->
     <div class="d-flex align-items-center gap-2 flex-wrap">
       <div class="btn-group btn-group-sm" role="group">
-        <button type="button" class="btn btn-outline-secondary active" onclick="filterBySeverity('ALL', this)">All</button>
-        <button type="button" class="btn btn-outline-danger" onclick="filterBySeverity('CRITICAL', this)">Critical</button>
-        <button type="button" class="btn btn-outline-warning" onclick="filterBySeverity('HIGH', this)">High</button>
-        <button type="button" class="btn btn-outline-primary" onclick="filterBySeverity('MEDIUM', this)">Medium</button>
+        <button type="button" class="btn btn-outline-secondary active py-0.5 px-2.5 font-mono" style="font-size: 0.74rem;" onclick="filterBySeverity('ALL', this)">All</button>
+        <button type="button" class="btn btn-outline-danger py-0.5 px-2.5 font-mono" style="font-size: 0.74rem;" onclick="filterBySeverity('CRITICAL', this)">Critical</button>
+        <button type="button" class="btn btn-outline-warning py-0.5 px-2.5 font-mono" style="font-size: 0.74rem;" onclick="filterBySeverity('HIGH', this)">High</button>
+        <button type="button" class="btn btn-outline-primary py-0.5 px-2.5 font-mono" style="font-size: 0.74rem;" onclick="filterBySeverity('MEDIUM', this)">Medium</button>
       </div>
 
-      <input type="text" id="liveSearch" class="form-control form-control-sm bg-dark text-light border-secondary" placeholder="🔍 Instant search by Host, IP, Rule, User..." onkeyup="filterLiveAlerts()" style="width: 280px;">
+      <div class="position-relative">
+        <input type="text" id="liveSearch" class="form-control form-control-sm font-mono ps-4 py-1" placeholder="Search Host, IP, Rule, User..." onkeyup="filterLiveAlerts()" style="width: 260px; font-size: 0.76rem;">
+        <i class="bi bi-search position-absolute top-50 translate-middle-y ms-2 text-muted" style="font-size: 0.72rem;"></i>
+      </div>
       
-      <a href="/alerts" class="btn btn-sm btn-info text-dark fw-bold">Full Triage Workspace</a>
+      <a href="/alerts" class="btn btn-sm btn-info text-dark fw-semibold py-1 px-3 font-mono" style="font-size: 0.76rem;">Triage Workspace</a>
     </div>
   </div>
   
@@ -215,40 +217,47 @@
         <tbody id="recent-alerts-tbody">
           {% for a in recent %}
           <tr class="alert-row" data-severity="{{ a.severity }}" data-status="{{ a.status }}">
-            <td class="text-muted small font-monospace" style="width: 90px;">{{ a.timestamp[11:19] }}</td>
+            <td class="text-muted small font-mono">{{ a.timestamp[11:19] }}</td>
             <td>
-              <a href="/alerts?device={{ a.device_name or 'LENOVO' }}" class="text-decoration-none">
-                <span class="badge bg-dark border border-info text-info font-monospace py-1 px-2">
-                  💻 {{ a.device_name or 'Localhost' }}
+              <a href="/alerts?device={{ a.device_name or 'WORKSTATION' }}" class="text-decoration-none">
+                <span class="badge font-mono border" style="background: rgba(255,255,255,0.03); border-color: var(--border-subtle); color: #38bdf8; font-size: 0.72rem;">
+                  <i class="bi bi-pc-display me-1 text-muted"></i>{{ a.device_name or 'Localhost' }}
                 </span>
               </a>
             </td>
-            <td><span class="badge badge-{{ a.severity }}">{{ a.severity }}</span></td>
+            <td><span class="badge badge-{{ a.severity }} font-mono" style="font-size: 0.7rem;">{{ a.severity }}</span></td>
             <td>
-              <span class="fw-bold text-light">{{ a.rule_name }}</span>
+              <span class="fw-semibold text-light" style="font-size: 0.82rem;">{{ a.rule_name }}</span>
             </td>
             <td>
-              <span class="badge bg-dark border border-secondary text-muted small font-monospace">
+              <span class="badge font-mono border text-muted" style="background: rgba(255,255,255,0.02); border-color: var(--border-subtle); font-size: 0.7rem;">
                 {{ a.mitre_technique or 'T1059' }}
               </span>
             </td>
-            <td class="font-monospace small text-info">{{ a.src_user or '-' }}</td>
-            <td class="font-monospace small text-warning">{{ a.src_ip or '-' }}</td>
+            <td class="font-mono small text-info">{{ a.src_user or '-' }}</td>
+            <td class="font-mono small text-warning">{{ a.src_ip or '-' }}</td>
             <td>
-              <span class="badge {% if a.status=='OPEN' %}bg-danger{% elif a.status=='FP' %}bg-secondary{% else %}bg-success{% endif %}">
+              <span class="badge font-mono {% if a.status=='OPEN' %}badge-CRITICAL{% elif a.status=='FP' %}bg-secondary text-light{% else %}badge-LOW{% endif %}" style="font-size: 0.68rem;">
                 {{ a.status }}
               </span>
             </td>
             <td>
               <div class="btn-group btn-group-sm">
-                <button class="btn btn-xs btn-outline-warning py-0 px-2" onclick="quickEscalate({{ a.id }}, this)" title="Escalate to formal Incident">⚡ Escalate</button>
-                <a href="/alerts" class="btn btn-xs btn-outline-info py-0 px-2" title="Investigate in Triage Workspace">Investigate</a>
+                <button class="btn btn-xs btn-outline-warning py-0.5 px-2 font-mono" style="font-size: 0.7rem;" onclick="quickEscalate({{ a.id }}, this)" title="Escalate to Incident">
+                  <i class="bi bi-lightning-charge"></i> Escalate
+                </button>
+                <a href="/alerts" class="btn btn-xs btn-outline-info py-0.5 px-2 font-mono" style="font-size: 0.7rem;" title="Investigate in Triage Workspace">
+                  Investigate
+                </a>
               </div>
             </td>
           </tr>
           {% else %}
           <tr>
-            <td colspan="9" class="text-center text-muted py-4">No active security alerts recorded. Ingestion stream nominal.</td>
+            <td colspan="9" class="text-center text-muted font-mono py-4" style="font-size: 0.8rem;">
+              <i class="bi bi-shield-check text-success fs-5 d-block mb-1 opacity-75"></i>
+              No active security incidents recorded. Ingestion stream nominal.
+            </td>
           </tr>
           {% endfor %}
         </tbody>
@@ -256,8 +265,6 @@
     </div>
   </div>
 </div>
-
-
 
 {% endblock %}
 
@@ -290,35 +297,34 @@ function filterBySeverity(sev, btn) {
 // Quick 1-Click Escalate from Live Feed
 function quickEscalate(alertId, btn) {
   btn.disabled = true;
-  btn.textContent = '⏳ ...';
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
   fetch(`/api/alert/${alertId}/escalate`, { method: 'POST' })
     .then(r => r.json())
     .then(d => {
       if (d.success) {
-        btn.className = 'btn btn-xs btn-success py-0 px-2';
-        btn.textContent = '✅ Escalated';
+        btn.className = 'btn btn-xs btn-success py-0.5 px-2 font-mono';
+        btn.innerHTML = '<i class="bi bi-check-lg"></i> Escalated';
         setTimeout(() => location.reload(), 800);
       } else {
         alert('Failed to escalate: ' + (d.error || 'Unknown error'));
         btn.disabled = false;
-        btn.textContent = '⚡ Escalate';
+        btn.innerHTML = '<i class="bi bi-lightning-charge"></i> Escalate';
       }
     })
     .catch(e => {
       alert('Error: ' + e);
       btn.disabled = false;
-      btn.textContent = '⚡ Escalate';
+      btn.innerHTML = '<i class="bi bi-lightning-charge"></i> Escalate';
     });
 }
 
-// ── Continuous Real-Time Metrics & Live Ingestion Sync ──
+// Continuous Real-Time Metrics & Live Ingestion Sync
 function updateRealtimeMetrics(manual = false) {
   const badge = document.getElementById('realtime-badge');
   fetch('/api/live/metrics')
     .then(r => {
       if (r.status === 401) {
-        // Session expired — redirect to login
-        if (badge) badge.innerHTML = `<span class="text-danger">⚠ Session Expired — Redirecting...</span>`;
+        if (badge) badge.innerHTML = `<span class="text-danger font-mono"><i class="bi bi-exclamation-circle me-1"></i>Session Expired</span>`;
         setTimeout(() => { window.location.href = '/login?next=/'; }, 1500);
         return null;
       }
@@ -335,9 +341,9 @@ function updateRealtimeMetrics(manual = false) {
       const statusEl = document.getElementById('metric-fleet-status');
       if (statusEl) {
         if (d.isolated_endpoints > 0) {
-          statusEl.innerHTML = `<span class="text-danger fw-bold">⚠️ ${d.isolated_endpoints} host(s) quarantined</span>`;
+          statusEl.innerHTML = `<span class="text-danger fw-semibold"><i class="bi bi-exclamation-triangle-fill me-1"></i>${d.isolated_endpoints} host(s) quarantined</span>`;
         } else {
-          statusEl.innerHTML = `<span class="text-success">● 100% Endpoints nominal</span>`;
+          statusEl.innerHTML = `<span class="text-success"><i class="bi bi-check-circle-fill me-1"></i>100% Endpoints nominal</span>`;
         }
       }
 
@@ -345,32 +351,34 @@ function updateRealtimeMetrics(manual = false) {
       const tbody = document.getElementById('recent-alerts-tbody');
       if (tbody && d.recent_alerts && d.recent_alerts.length > 0) {
         tbody.innerHTML = d.recent_alerts.map(a => {
-          const statusBadge = a.status === 'OPEN' ? 'bg-danger' : (a.status === 'FP' ? 'bg-secondary' : 'bg-success');
+          const statusClass = a.status === 'OPEN' ? 'badge-CRITICAL' : (a.status === 'FP' ? 'bg-secondary text-light' : 'badge-LOW');
           const timeStr = (a.timestamp || '').slice(11, 19);
           return `
             <tr class="alert-row" data-severity="${a.severity}" data-status="${a.status}">
-              <td class="text-muted small font-monospace" style="width: 90px;">${timeStr}</td>
+              <td class="text-muted small font-mono">${timeStr}</td>
               <td>
-                <a href="/alerts?device=${encodeURIComponent(a.device_name || 'LENOVO')}" class="text-decoration-none">
-                  <span class="badge bg-dark border border-info text-info font-monospace py-1 px-2">
-                    💻 ${a.device_name || 'Localhost'}
+                <a href="/alerts?device=${encodeURIComponent(a.device_name || 'WORKSTATION')}" class="text-decoration-none">
+                  <span class="badge font-mono border" style="background: rgba(255,255,255,0.03); border-color: var(--border-subtle); color: #38bdf8; font-size: 0.72rem;">
+                    <i class="bi bi-pc-display me-1 text-muted"></i>${a.device_name || 'Localhost'}
                   </span>
                 </a>
               </td>
-              <td><span class="badge badge-${a.severity}">${a.severity}</span></td>
-              <td><span class="fw-bold text-light">${a.rule_name}</span></td>
+              <td><span class="badge badge-${a.severity} font-mono" style="font-size: 0.7rem;">${a.severity}</span></td>
+              <td><span class="fw-semibold text-light" style="font-size: 0.82rem;">${a.rule_name}</span></td>
               <td>
-                <span class="badge bg-dark border border-secondary text-muted small font-monospace">
+                <span class="badge font-mono border text-muted" style="background: rgba(255,255,255,0.02); border-color: var(--border-subtle); font-size: 0.7rem;">
                   ${a.mitre_technique || 'T1059'}
                 </span>
               </td>
-              <td class="font-monospace small text-info">${a.src_user || '-'}</td>
-              <td class="font-monospace small text-warning">${a.src_ip || '-'}</td>
-              <td><span class="badge ${statusBadge}">${a.status}</span></td>
+              <td class="font-mono small text-info">${a.src_user || '-'}</td>
+              <td class="font-mono small text-warning">${a.src_ip || '-'}</td>
+              <td><span class="badge font-mono ${statusClass}" style="font-size: 0.68rem;">${a.status}</span></td>
               <td>
                 <div class="btn-group btn-group-sm">
-                  <button class="btn btn-xs btn-outline-warning py-0 px-2" onclick="quickEscalate(${a.id}, this)" title="Escalate to formal Incident">⚡ Escalate</button>
-                  <a href="/alerts" class="btn btn-xs btn-outline-info py-0 px-2" title="Investigate in Triage Workspace">Investigate</a>
+                  <button class="btn btn-xs btn-outline-warning py-0.5 px-2 font-mono" style="font-size: 0.7rem;" onclick="quickEscalate(${a.id}, this)" title="Escalate to Incident">
+                    <i class="bi bi-lightning-charge"></i> Escalate
+                  </button>
+                  <a href="/alerts" class="btn btn-xs btn-outline-info py-0.5 px-2 font-mono" style="font-size: 0.7rem;" title="Investigate in Triage Workspace">Investigate</a>
                 </div>
               </td>
             </tr>
@@ -379,46 +387,81 @@ function updateRealtimeMetrics(manual = false) {
       }
 
       if (badge) {
-        badge.innerHTML = `<span class="pulse-dot"></span> Live Sync: Active (${new Date().toLocaleTimeString()})`;
+        badge.innerHTML = `<span class="pulse-dot"></span> FLEET SYNC: ONLINE (${new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'})})`;
       }
     })
-    .catch(err => {
-      if (badge) badge.innerHTML = `<span class="text-warning">● Sync Paused</span>`;
+    .catch(() => {
+      if (badge) badge.innerHTML = `<span class="text-warning font-mono"><i class="bi bi-arrow-repeat me-1"></i>SYNC PAUSED</span>`;
     });
 }
 
 // Auto-sync every 8 seconds
 setInterval(updateRealtimeMetrics, 8000);
 
-// Render Charts
+// Render Charts with Refined Enterprise Styling
 fetch('/api/stats').then(r=>r.json()).then(data=>{
-  // Severity Chart
+  // Severity Doughnut Chart
   const sevLabels = data.by_severity.map(x=>x.severity);
   const sevData   = data.by_severity.map(x=>x.cnt);
-  const sevColors = sevLabels.map(s=>({'CRITICAL':'#ef4444','HIGH':'#f59e0b','MEDIUM':'#3b82f6','LOW':'#10b981'}[s]||'#94a3b8'));
+  const sevColors = sevLabels.map(s=>({'CRITICAL':'#ef4444','HIGH':'#f59e0b','MEDIUM':'#3b82f6','LOW':'#10b981'}[s]||'#64748b'));
+  
   new Chart(document.getElementById('sevChart'),{
     type:'doughnut',
-    data:{labels:sevLabels, datasets:[{data:sevData, backgroundColor:sevColors, borderWidth:0}]},
+    data:{
+      labels: sevLabels,
+      datasets:[{
+        data: sevData,
+        backgroundColor: sevColors,
+        borderWidth: 2,
+        borderColor: '#0f1523',
+        hoverOffset: 4
+      }]
+    },
     options:{
       maintainAspectRatio: false,
-      plugins:{legend:{labels:{color:'#c9d1d9', font:{size:11}}}}
+      cutout: '72%',
+      plugins:{
+        legend:{
+          position: 'bottom',
+          labels:{
+            color:'#94a3b8',
+            font:{family:'JetBrains Mono', size:10},
+            boxWidth: 8,
+            boxHeight: 8,
+            padding: 12
+          }
+        }
+      }
     }
   });
 
-  // MITRE Chart
+  // MITRE Horizontal Bar Chart
   new Chart(document.getElementById('mitreChart'),{
     type:'bar',
     data:{
       labels: data.by_mitre.map(x=>x.mitre_tactic),
-      datasets:[{label:'Alerts', data:data.by_mitre.map(x=>x.cnt), backgroundColor:'#38bdf8'}]
+      datasets:[{
+        label:'Alert Count',
+        data: data.by_mitre.map(x=>x.cnt),
+        backgroundColor:'rgba(56, 189, 248, 0.75)',
+        hoverBackgroundColor:'#38bdf8',
+        borderRadius: 4,
+        barThickness: 14
+      }]
     },
     options:{
       maintainAspectRatio: false,
       indexAxis:'y',
       plugins:{legend:{display:false}},
       scales:{
-        x:{ticks:{color:'#94a3b8', font:{size:10}}, grid:{color:'#1e293b'}},
-        y:{ticks:{color:'#e2e8f0', font:{size:11}}, grid:{display:false}}
+        x:{
+          ticks:{color:'#64748b', font:{family:'JetBrains Mono', size:9}},
+          grid:{color:'rgba(255, 255, 255, 0.04)'}
+        },
+        y:{
+          ticks:{color:'#cbd5e1', font:{family:'Inter', size:10, weight:500}},
+          grid:{display:false}
+        }
       }
     }
   });

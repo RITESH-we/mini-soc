@@ -3,11 +3,14 @@
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
   <div>
-    <h4 class="mb-0 text-info fw-bold">🎯 Threat Hunting &amp; Proactive Anomaly Discovery</h4>
-    <span class="text-muted small">Execute cross-endpoint hunting playbooks across live telemetry logs without waiting for static alerts</span>
+    <h4 class="mb-0 text-light fw-bold font-mono d-flex align-items-center gap-2" style="font-size: 1.15rem;">
+      <i class="bi bi-crosshair text-warning"></i>
+      <span>PROACTIVE THREAT HUNTING CONSOLE</span>
+    </h4>
+    <span class="text-muted small">Hypothesis-driven queries across raw endpoint telemetry tables without waiting for static alerts</span>
   </div>
   <div>
-    <span class="badge bg-primary">Hypothesis-Driven Hunting (MITRE ATT&amp;CK)</span>
+    <span class="badge font-mono border" style="background: rgba(56, 189, 248, 0.08); border-color: rgba(56, 189, 248, 0.25); color: #38bdf8; font-size: 0.68rem;">MITRE ATT&amp;CK Matrix</span>
   </div>
 </div>
 
@@ -161,20 +164,20 @@ function runHunt(type) {
       status.textContent = `Completed in ${data.duration_ms}ms • Playbook: ${data.playbook_name}`;
 
       if (data.results.length === 0) {
-        body.innerHTML = `<tr><td colspan="4" class="text-center text-success py-5">✅ Hunt complete: Zero malicious indicators found for '${data.playbook_name}'.</td></tr>`;
+        body.innerHTML = `<tr><td colspan="4" class="text-center text-success font-mono py-4"><i class="bi bi-check-circle me-1"></i>Hunt complete: Zero malicious telemetry matches found for '${data.playbook_name}'.</td></tr>`;
         return;
       }
 
       body.innerHTML = data.results.map(r => `
         <tr>
-          <td class="text-muted small font-monospace" style="width: 170px;">${r.timestamp.substring(0, 19)}</td>
+          <td class="text-muted small font-mono" style="width: 170px;">${r.timestamp.substring(0, 19)}</td>
           <td style="width: 180px;">
-            <span class="badge bg-black border border-info text-info font-monospace py-1 px-2">
-              💻 ${r.hostname}
+            <span class="badge font-mono border" style="background: rgba(255,255,255,0.03); border-color: var(--border-subtle); color: #38bdf8; font-size: 0.72rem;">
+              <i class="bi bi-pc-display me-1 text-muted"></i>${r.hostname}
             </span>
           </td>
-          <td style="width: 150px;"><span class="badge bg-secondary">${r.log_type}</span></td>
-          <td class="small font-monospace text-light">${r.details}</td>
+          <td style="width: 150px;"><span class="badge font-mono" style="background: rgba(255,255,255,0.04); border: 1px solid var(--border-subtle); color: #94a3b8; font-size: 0.68rem;">${r.log_type}</span></td>
+          <td class="small font-mono text-light">${r.details}</td>
         </tr>
       `).join('');
     })

@@ -1,13 +1,19 @@
 {% extends "base.html" %}
 {% block title %}Network Security Monitoring & IDS/IPS{% endblock %}
 {% block content %}
+<!-- Page Header -->
 <div class="d-flex justify-content-between align-items-center mb-3">
   <div>
-    <h4 class="mb-0 text-info">Network Security Monitoring (NSM) &amp; Active IDS/IPS</h4>
-    <span class="text-muted small">Real-time socket inspection, port-sweep detection &amp; host firewall enforcement</span>
+    <h4 class="mb-0 text-light fw-bold font-mono d-flex align-items-center gap-2" style="font-size: 1.15rem;">
+      <i class="bi bi-diagram-3 text-info"></i>
+      <span>NETWORK SECURITY MONITORING &amp; ACTIVE IPS</span>
+    </h4>
+    <span class="text-muted small">Real-time socket inspection, stealth sweep discovery &amp; host firewall enforcement</span>
   </div>
   <div>
-    <button class="btn btn-sm btn-outline-warning" onclick="triggerScanCheck()">🔍 Run Connection Scan</button>
+    <button class="btn btn-sm btn-outline-warning font-mono py-1 px-2.5" style="font-size: 0.76rem;" onclick="triggerScanCheck()">
+      <i class="bi bi-broadcast me-1"></i> Scan Sockets
+    </button>
   </div>
 </div>
 
@@ -15,29 +21,34 @@
   <!-- Manual Firewall Block Card -->
   <div class="col-md-4">
     <div class="card h-100">
-      <div class="card-header bg-dark text-light border-secondary">
-        <strong>🛡️ Host Firewall Containment (IPS)</strong>
+      <div class="card-header d-flex align-items-center gap-1.5">
+        <i class="bi bi-shield-slash text-danger"></i>
+        <span>Host Firewall Containment (IPS)</span>
       </div>
       <div class="card-body">
         <form method="POST" action="/network/block">
           <div class="mb-3">
-            <label class="form-label small text-muted">Remote IP Address to Block</label>
-            <input type="text" name="ip_address" class="form-control bg-dark text-light border-secondary" placeholder="e.g. 185.220.101.5" required>
+            <label class="form-label small text-muted font-mono" style="font-size: 0.72rem;">Remote IP Address to Block</label>
+            <input type="text" name="ip_address" class="form-control font-mono" placeholder="e.g. 185.220.101.5" required>
           </div>
           <div class="mb-3">
-            <label class="form-label small text-muted">Justification / Threat Intel Reason</label>
-            <input type="text" name="reason" class="form-control bg-dark text-light border-secondary" placeholder="Adversary C2 / Port Scan" value="Analyst manual containment block">
+            <label class="form-label small text-muted font-mono" style="font-size: 0.72rem;">Justification / Threat Intel Reason</label>
+            <input type="text" name="reason" class="form-control font-mono" placeholder="Adversary C2 / Port Scan" value="Analyst manual containment block">
           </div>
           <div class="mb-3">
-            <label class="form-label small text-muted">Containment Profile</label>
-            <select name="containment_profile" class="form-select form-select-sm bg-dark text-light border-secondary">
-              <option value="BIDIRECTIONAL_DROP" selected>🛡️ Bidirectional Drop (Inbound + Outbound)</option>
-              <option value="OUTBOUND_C2_DROP">📡 Outbound C2 Drop Only (Stop Exfiltration)</option>
+            <label class="form-label small text-muted font-mono" style="font-size: 0.72rem;">Containment Profile</label>
+            <select name="containment_profile" class="form-select form-select-sm font-mono">
+              <option value="BIDIRECTIONAL_DROP" selected>Bidirectional Drop (Inbound + Outbound)</option>
+              <option value="OUTBOUND_C2_DROP">Outbound C2 Drop Only (Stop Exfiltration)</option>
             </select>
           </div>
           <div class="d-flex gap-2">
-            <button type="submit" formaction="/network/block" class="btn btn-danger flex-grow-1">🚫 Block IP</button>
-            <button type="submit" formaction="/network/unblock" class="btn btn-success flex-grow-1">🟢 Unblock IP</button>
+            <button type="submit" formaction="/network/block" class="btn btn-danger flex-grow-1 font-mono py-1" style="font-size: 0.78rem;">
+              <i class="bi bi-shield-x me-1"></i> Block IP
+            </button>
+            <button type="submit" formaction="/network/unblock" class="btn btn-outline-success flex-grow-1 font-mono py-1" style="font-size: 0.78rem;">
+              <i class="bi bi-unlock me-1"></i> Unblock IP
+            </button>
           </div>
         </form>
       </div>
@@ -47,9 +58,9 @@
   <!-- Active Blocklist Table -->
   <div class="col-md-8">
     <div class="card h-100">
-      <div class="card-header bg-dark text-light border-secondary d-flex justify-content-between">
-        <strong>Active Firewall Containment List</strong>
-        <span class="badge bg-danger">{{ blocked_ips|length }} Blocked</span>
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span class="d-flex align-items-center gap-1.5"><i class="bi bi-list-check text-info"></i> Active Firewall Containment List</span>
+        <span class="badge font-mono badge-CRITICAL" style="font-size: 0.68rem;">{{ blocked_ips|length }} Blocked</span>
       </div>
       <div class="card-body p-0">
         <div class="table-responsive" style="max-height: 230px;">
@@ -67,16 +78,16 @@
             <tbody>
               {% for b in blocked_ips %}
               <tr>
-                <td class="text-danger fw-bold font-monospace">{{ b.ip_address }}</td>
+                <td class="text-danger fw-bold font-mono">{{ b.ip_address }}</td>
                 <td class="small">{{ b.reason }}</td>
                 <td>
-                  <span class="badge bg-dark border border-info text-info font-monospace small">
+                  <span class="badge font-mono border" style="background: rgba(255,255,255,0.03); border-color: var(--border-subtle); color: #38bdf8; font-size: 0.68rem;">
                     {{ 'IN+OUT' if (b.containment_profile or 'BIDIRECTIONAL_DROP') == 'BIDIRECTIONAL_DROP' else 'OUT-ONLY' }}
                   </span>
                 </td>
-                <td class="text-muted small">{{ b.blocked_at[:19] }}</td>
+                <td class="text-muted small font-mono">{{ b.blocked_at[:19] }}</td>
                 <td>
-                  <span class="badge {% if b.active==1 %}bg-danger{% else %}bg-secondary{% endif %}">
+                  <span class="badge font-mono {% if b.active==1 %}badge-CRITICAL{% else %}bg-secondary text-light{% endif %}" style="font-size: 0.68rem;">
                     {% if b.active==1 %}ACTIVE DROP{% else %}LIFTED{% endif %}
                   </span>
                 </td>
@@ -84,15 +95,15 @@
                   {% if b.active==1 %}
                   <form method="POST" action="/network/unblock" style="display:inline;">
                     <input type="hidden" name="ip_address" value="{{ b.ip_address }}">
-                    <button class="btn btn-xs btn-outline-success py-0 px-2" style="font-size: 0.75rem;">Unblock</button>
+                    <button class="btn btn-xs btn-outline-success py-0.5 px-2 font-mono" style="font-size: 0.72rem;">Unblock</button>
                   </form>
                   {% else %}
-                  <span class="text-muted small">-</span>
+                  <span class="text-muted small font-mono">-</span>
                   {% endif %}
                 </td>
               </tr>
               {% else %}
-              <tr><td colspan="5" class="text-center text-muted py-3">No active IP blocks currently enforced.</td></tr>
+              <tr><td colspan="6" class="text-center text-muted font-mono py-4" style="font-size: 0.8rem;">No active IP drops currently enforced.</td></tr>
               {% endfor %}
             </tbody>
           </table>
@@ -103,10 +114,10 @@
 </div>
 
 <!-- Active Subnet IP & Port Discovery Scanner -->
-<div class="card mb-4 border-info">
-  <div class="card-header bg-dark text-info border-secondary d-flex justify-content-between align-items-center">
-    <span><strong>🌐 Active Subnet IP &amp; Port Discovery Scanner</strong></span>
-    <span class="badge bg-secondary">Reconnaissance &amp; Rogue Device Detection</span>
+<div class="card mb-4">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <span class="d-flex align-items-center gap-1.5"><i class="bi bi-radar text-info"></i> <strong>Active Subnet IP &amp; Port Discovery Scanner</strong></span>
+    <span class="badge font-mono border" style="background: rgba(255,255,255,0.03); border-color: var(--border-subtle); color: #94a3b8; font-size: 0.68rem;">Reconnaissance &amp; Rogue Device Discovery</span>
   </div>
   <div class="card-body">
     <div class="row g-2 align-items-end mb-3">
