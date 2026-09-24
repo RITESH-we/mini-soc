@@ -85,17 +85,25 @@ def resolve_target_to_ips(target: str) -> list:
     except ValueError:
         pass
 
-    # Resolve hostname via DNS
-    try:
-        results = socket.getaddrinfo(clean, None, socket.AF_UNSPEC, socket.SOCK_STREAM)
-        ips = []
-        for r in results:
-            ip = r[4][0]
-            if ip not in ips:
-                ips.append(ip)
-        return ips if ips else [clean]
-    except Exception:
-        return [clean]
+    # Resolve hostname via DNS (including www/apex canonical variants)
+    targets_to_resolve = [clean]
+    if '.' in clean and not clean.replace('.', '').isdigit():
+        if clean.startswith('www.'):
+            targets_to_resolve.append(clean[4:])
+        else:
+            targets_to_resolve.append(f"www.{clean}")
+
+    ips = []
+    for tgt in targets_to_resolve:
+        try:
+            results = socket.getaddrinfo(tgt, None, socket.AF_UNSPEC, socket.SOCK_STREAM)
+            for r in results:
+                ip = r[4][0]
+                if ip not in ips:
+                    ips.append(ip)
+        except Exception:
+            pass
+    return ips if ips else [clean]
 
 def block_ip(ip: str, reason: str = "MiniSOC Automated IPS Rule", containment_profile: str = "BIDIRECTIONAL_DROP", target_endpoint: str = "GLOBAL") -> dict:
     """
@@ -107,6 +115,15 @@ def block_ip(ip: str, reason: str = "MiniSOC Automated IPS Rule", containment_pr
         return {"success": False, "message": "Invalid or empty target specified."}
 
     raw_clean = ip.strip()
+    if '://' in raw_clean:
+        raw_clean = raw_clean.split('://', 1)[1]
+    if '/' in raw_clean:
+        raw_clean = raw_clean.split('/', 1)[0]
+    if raw_clean.count(':') == 1 and not raw_clean.startswith('['):
+        parts = raw_clean.rsplit(':', 1)
+        if parts[1].isdigit():
+            raw_clean = parts[0]
+
     if not raw_clean or raw_clean in ('-', '127.0.0.1', 'localhost', '::1', '0.0.0.0'):
         return {"success": False, "message": f"Skipped blocking loopback address {raw_clean}"}
 
@@ -119,13 +136,19 @@ def block_ip(ip: str, reason: str = "MiniSOC Automated IPS Rule", containment_pr
     blocked_records = []
     target_endpoint = (target_endpoint or "GLOBAL").strip()
 
+    is_domain = False
+    try:
+        ipaddress.ip_address(raw_clean)
+    except ValueError:
+        if '.' in raw_clean and not raw_clean.replace('.', '').isdigit():
+            is_domain = True
+
+    # 1. Apply host firewall drops for all resolved IP addresses
     for target_ip in resolved_ips:
         if target_ip in ('127.0.0.1', 'localhost', '::1', '0.0.0.0'):
             continue
 
         rule_name = f"MiniSOC_IPS_Block_{target_ip.replace(':', '_')}"
-
-        # 1. Best-effort host firewall drop (does not fail if in container without CAP_NET_ADMIN)
         try:
             if system == "Windows":
                 cmd_out = [
@@ -153,13 +176,13 @@ def block_ip(ip: str, reason: str = "MiniSOC Automated IPS Rule", containment_pr
         except Exception:
             pass
 
-        # 2. Store in database with target_endpoint scope
-        target_reason = reason
-        if raw_clean != target_ip:
-            target_reason = f"{reason} (Target: {raw_clean})"
-
-        conn = get_conn()
-        try:
+    # 2. Store in database: primary target (domain or IP) plus associated IPs
+    conn = get_conn()
+    now_iso = datetime.now().isoformat()
+    try:
+        # If it was a domain name, insert the domain itself so UI shows the human-readable target
+        if is_domain:
+            domain_reason = f"{reason} (Resolved: {', '.join(resolved_ips[:3])}{'...' if len(resolved_ips) > 3 else ''})"
             conn.execute("""
                 INSERT INTO blocked_ips (ip_address, reason, blocked_at, active, containment_profile, target_endpoint)
                 VALUES (?, ?, ?, 1, ?, ?)
@@ -169,17 +192,36 @@ def block_ip(ip: str, reason: str = "MiniSOC Automated IPS Rule", containment_pr
                     active=1,
                     containment_profile=excluded.containment_profile,
                     target_endpoint=excluded.target_endpoint
-            """, (target_ip, target_reason, datetime.now().isoformat(), containment_profile, target_endpoint))
-            conn.commit()
-            blocked_records.append(target_ip)
-        finally:
-            conn.close()
+            """, (raw_clean, domain_reason, now_iso, containment_profile, target_endpoint))
+            blocked_records.append(raw_clean)
+
+        # Also register the resolved IPs so IP lookups identify them as blocked
+        for target_ip in resolved_ips:
+            if target_ip in ('127.0.0.1', 'localhost', '::1', '0.0.0.0'):
+                continue
+            ip_reason = f"{reason} (Associated: {raw_clean})" if is_domain else reason
+            conn.execute("""
+                INSERT INTO blocked_ips (ip_address, reason, blocked_at, active, containment_profile, target_endpoint)
+                VALUES (?, ?, ?, 1, ?, ?)
+                ON CONFLICT(ip_address) DO UPDATE SET
+                    reason=excluded.reason,
+                    blocked_at=excluded.blocked_at,
+                    active=1,
+                    containment_profile=excluded.containment_profile,
+                    target_endpoint=excluded.target_endpoint
+            """, (target_ip, ip_reason, now_iso, containment_profile, target_endpoint))
+            if target_ip not in blocked_records:
+                blocked_records.append(target_ip)
+        conn.commit()
+    finally:
+        conn.close()
 
     return {
         "success": len(blocked_records) > 0,
-        "message": f"Blocked {len(blocked_records)} target(s): {', '.join(blocked_records)} ({containment_profile}) on scope [{target_endpoint}].",
-        "resolved_ips": blocked_records,
-        "target_endpoint": target_endpoint
+        "message": f"Blocked target '{raw_clean}' ({len(resolved_ips)} IPs, profile: {containment_profile}, scope: [{target_endpoint}]).",
+        "resolved_ips": resolved_ips,
+        "target_endpoint": target_endpoint,
+        "is_domain": is_domain
     }
 
 def unblock_ip(ip: str, target_endpoint: str = None) -> dict:
@@ -187,32 +229,68 @@ def unblock_ip(ip: str, target_endpoint: str = None) -> dict:
         return {"success": False, "message": "Invalid target specified."}
 
     raw_clean = ip.strip()
+    if '://' in raw_clean:
+        raw_clean = raw_clean.split('://', 1)[1]
+    if '/' in raw_clean:
+        raw_clean = raw_clean.split('/', 1)[0]
+    if raw_clean.count(':') == 1 and not raw_clean.startswith('['):
+        parts = raw_clean.rsplit(':', 1)
+        if parts[1].isdigit():
+            raw_clean = parts[0]
+
     resolved_ips = resolve_target_to_ips(raw_clean)
     system = platform.system()
     flags = get_hidden_subprocess_flags()
 
+    # Discover associated domain names if target was an IP or has linked records
+    conn = get_conn()
+    associated_domains = []
+    try:
+        rows = conn.execute("SELECT ip_address, reason FROM blocked_ips WHERE ip_address=? OR reason LIKE ?", (raw_clean, f"%{raw_clean}%")).fetchall()
+        for r in rows:
+            for piece in str(r['reason'] or '').split():
+                if '.' in piece and not piece.replace('.', '').isdigit():
+                    clean_d = piece.strip("()[],:;'\"")
+                    if clean_d and clean_d not in associated_domains and clean_d != raw_clean:
+                        associated_domains.append(clean_d)
+    finally:
+        conn.close()
+
+    for ad in associated_domains:
+        for aip in resolve_target_to_ips(ad):
+            if aip not in resolved_ips:
+                resolved_ips.append(aip)
+
+    # 1. Delete server host firewall rules
     for target_ip in resolved_ips:
         rule_name = f"MiniSOC_IPS_Block_{target_ip.replace(':', '_')}"
         try:
             if system == "Windows":
-                cmd = ["netsh", "advfirewall", "firewall", "delete", "rule", f"name={rule_name}"]
-                subprocess.run(cmd, capture_output=True, **flags)
-                cmd_out = ["netsh", "advfirewall", "firewall", "delete", "rule", f"name={rule_name}_out"]
-                subprocess.run(cmd_out, capture_output=True, **flags)
+                subprocess.run(["netsh", "advfirewall", "firewall", "delete", "rule", f"name={rule_name}"], capture_output=True, **flags)
+                subprocess.run(["netsh", "advfirewall", "firewall", "delete", "rule", f"name={rule_name}_out"], capture_output=True, **flags)
             elif system == "Linux" and shutil.which("iptables"):
                 subprocess.run(["iptables", "-D", "INPUT", "-s", target_ip, "-j", "DROP"], capture_output=True)
                 subprocess.run(["iptables", "-D", "OUTPUT", "-d", target_ip, "-j", "DROP"], capture_output=True)
         except Exception:
             pass
 
-        conn = get_conn()
-        try:
-            conn.execute("UPDATE blocked_ips SET active=0 WHERE ip_address=?", (target_ip,))
-            conn.commit()
-        finally:
-            conn.close()
+    # 2. Deactivate records in database (target, resolved IPs, and associated domains)
+    targets_to_deactivate = list(set([raw_clean] + resolved_ips + associated_domains))
+    conn = get_conn()
+    try:
+        placeholders = ','.join(['?'] * len(targets_to_deactivate))
+        conn.execute(f"UPDATE blocked_ips SET active=0 WHERE ip_address IN ({placeholders})", targets_to_deactivate)
+        conn.execute("UPDATE blocked_ips SET active=0 WHERE reason LIKE ?", (f"%{raw_clean}%",))
+        conn.commit()
+    finally:
+        conn.close()
 
-    return {"success": True, "message": f"Target {raw_clean} unblocked.", "resolved_ips": resolved_ips}
+    return {
+        "success": True,
+        "message": f"Target {raw_clean} unblocked.",
+        "resolved_ips": resolved_ips,
+        "domains": associated_domains
+    }
 
 def list_blocked_ips():
     conn = get_conn()

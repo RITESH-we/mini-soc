@@ -827,9 +827,38 @@ def get_security_audit_events():
     return events[:50], pending_state
 
 
+def is_admin() -> bool:
+    """Checks if current process has Administrator/root rights."""
+    try:
+        if platform.system() == "Windows":
+            import ctypes
+            return ctypes.windll.shell32.IsUserAnAdmin() != 0
+        else:
+            return os.geteuid() == 0
+    except Exception:
+        return False
+
+
+def run_elevated_powershell(script: str) -> bool:
+    """
+    Executes a PowerShell script block with Administrator elevation (RunAs)
+    using UTF-16LE Base64 -EncodedCommand to eliminate all escaping and quoting issues.
+    """
+    try:
+        encoded_bytes = script.encode("utf-16le")
+        b64_str = base64.b64encode(encoded_bytes).decode("ascii")
+        ps_cmd = f"Start-Process powershell -ArgumentList '-NoProfile -ExecutionPolicy Bypass -EncodedCommand {b64_str}' -Verb RunAs -WindowStyle Hidden"
+        r = silent_run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_cmd], capture_output=True)
+        return r.returncode == 0
+    except Exception as e:
+        log_msg(f"[-] run_elevated_powershell error: {e}")
+        return False
+
+
 def resolve_all_ips(target: str) -> list:
     """
-    Discovers all local IPv4 and IPv6 addresses for a target hostname/domain locally on endpoint.
+    Discovers all local IPv4 and IPv6 addresses for a target hostname/domain locally on endpoint,
+    including canonical variants (both apex and www) to capture CDN IP addresses.
     """
     if not target:
         return []
@@ -849,15 +878,23 @@ def resolve_all_ips(target: str) -> list:
     except ValueError:
         pass
 
+    targets_to_query = [clean]
+    if "." in clean and not clean.replace(".", "").isdigit():
+        if clean.startswith("www."):
+            targets_to_query.append(clean[4:])
+        else:
+            targets_to_query.append(f"www.{clean}")
+
     resolved = []
-    try:
-        addr_infos = socket.getaddrinfo(clean, None)
-        for ai in addr_infos:
-            ip_str = ai[4][0]
-            if ip_str not in resolved:
-                resolved.append(ip_str)
-    except Exception:
-        pass
+    for tgt in targets_to_query:
+        try:
+            addr_infos = socket.getaddrinfo(tgt, None)
+            for ai in addr_infos:
+                ip_str = ai[4][0]
+                if ip_str not in resolved:
+                    resolved.append(ip_str)
+        except Exception:
+            pass
     return resolved
 
 
@@ -906,12 +943,12 @@ def sinkhole_domain(domain: str, remove: bool = False) -> bool:
             line_strip = line.strip()
             if any(line_strip.endswith(f" {v}") or line_strip.endswith(f"\t{v}") for v in variants):
                 continue
-            if line_strip.startswith(f"# MiniSOC EDR Block: {clean}"):
+            if line_strip.startswith(f"# MiniSOC EDR Block: {clean}") or line_strip.startswith(f"# TRISHUL EDR Block: {clean}"):
                 continue
             new_lines.append(line)
 
         if not remove:
-            new_lines.append(f"# MiniSOC EDR Block: {clean}")
+            new_lines.append(f"# TRISHUL EDR Block: {clean}")
             for v in variants:
                 new_lines.append(f"0.0.0.0 {v}")
                 new_lines.append(f"::1 {v}")
@@ -926,30 +963,19 @@ def sinkhole_domain(domain: str, remove: bool = False) -> bool:
         return True
     except (PermissionError, IOError):
         if system == "Windows":
-            try:
-                if remove:
-                    ps_filter = " -and ".join([f"$_ -notmatch '{re.escape(v)}'" for v in variants])
-                    ps_code = (
-                        f"$p = \"$env:SystemRoot\\System32\\drivers\\etc\\hosts\"; "
-                        f"$c = (Get-Content $p | Where-Object {{ {ps_filter} }}); "
-                        f"Set-Content -Path $p -Value $c -Force; "
-                        f"ipconfig /flushdns"
-                    )
-                else:
-                    entries_str = "`n".join([f"0.0.0.0 {v}`n::1 {v}" for v in variants])
-                    ps_code = (
-                        f"$p = \"$env:SystemRoot\\System32\\drivers\\etc\\hosts\"; "
-                        f"$entry = \"`n# MiniSOC EDR Block: {clean}`n{entries_str}\"; "
-                        f"Add-Content -Path $p -Value $entry; "
-                        f"ipconfig /flushdns"
-                    )
-                cmd = f"Start-Process powershell -ArgumentList '-NoProfile -ExecutionPolicy Bypass -Command \"{ps_code}\"' -Verb RunAs -WindowStyle Hidden"
-                silent_run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", cmd], capture_output=True)
-                log_msg(f"[!] Active Defense: Requested elevation for Layer 7 hosts sinkhole on {clean}.")
-                return True
-            except Exception as e:
-                log_msg(f"[-] Elevated hosts sinkhole failed: {e}")
-                return False
+            ps_lines = ['$p = "$env:SystemRoot\\System32\\drivers\\etc\\hosts"']
+            ps_filter = " -and ".join([f"$_ -notmatch [regex]::Escape('{v}')" for v in variants])
+            ps_lines.append(f"$c = (Get-Content $p | Where-Object {{ {ps_filter} }})")
+            ps_lines.append("Set-Content -Path $p -Value $c -Force")
+            if not remove:
+                entries = "`n".join([f"0.0.0.0 {v}`n::1 {v}" for v in variants])
+                ps_lines.append(f"$entry = \"`n# TRISHUL EDR Block: {clean}`n{entries}\"")
+                ps_lines.append("Add-Content -Path $p -Value $entry")
+            ps_lines.append("ipconfig /flushdns")
+            ps_script = "\n".join(ps_lines)
+            run_elevated_powershell(ps_script)
+            log_msg(f"[!] Active Defense: Executed elevated Layer 7 hosts sinkhole for {clean}.")
+            return True
     return False
 
 
@@ -990,9 +1016,26 @@ def execute_remediation(action_payload, server_url=None):
         containment_profile = action_payload.get("containment_profile", "BIDIRECTIONAL_DROP")
         
         target_str = str(target or original_target or "").strip()
+        if "://" in target_str:
+            target_str = target_str.split("://", 1)[1]
+        if "/" in target_str:
+            target_str = target_str.split("/", 1)[0]
+        if target_str.count(":") == 1 and not target_str.startswith("["):
+            parts = target_str.rsplit(":", 1)
+            if parts[1].isdigit():
+                target_str = parts[0]
+
         is_domain = False
         if domain:
             is_domain = True
+            if "://" in domain:
+                domain = domain.split("://", 1)[1]
+            if "/" in domain:
+                domain = domain.split("/", 1)[0]
+            if domain.count(":") == 1 and not domain.startswith("["):
+                parts = domain.rsplit(":", 1)
+                if parts[1].isdigit():
+                    domain = parts[0]
         else:
             try:
                 ipaddress.ip_address(target_str)
@@ -1001,11 +1044,7 @@ def execute_remediation(action_payload, server_url=None):
                     domain = target_str
                     is_domain = True
 
-        # 1. Enforce Layer 7 DNS sinkholing if a domain is involved
-        if is_domain and domain:
-            sinkhole_domain(domain, remove=False)
-
-        # 2. Gather all candidate IPs to drop
+        # 1. Gather all candidate IPs to drop (including apex and www variants)
         ip_set = set()
         if target:
             ip_set.add(str(target).strip())
@@ -1030,38 +1069,54 @@ def execute_remediation(action_payload, server_url=None):
         if not valid_ips and not is_domain:
             return "No valid IP or domain to block"
 
-        # 3. Apply Firewall Drop Rules
-        elevation_needed = False
-        elevation_cmds = []
+        # 2. Check if running with Administrator rights
+        admin_mode = is_admin()
 
         if system == "Windows":
-            for target_ip in valid_ips:
-                rule_name = f"MiniSOC_EDR_Drop_{target_ip.replace(':', '_')}"
-                r1 = silent_run([
-                    "netsh", "advfirewall", "firewall", "add", "rule",
-                    f"name={rule_name}", "dir=out", "action=block", f"remoteip={target_ip}"
-                ], capture_output=True, text=True)
-                if containment_profile == "BIDIRECTIONAL_DROP":
-                    silent_run([
-                        "netsh", "advfirewall", "firewall", "add", "rule",
-                        f"name={rule_name}_in", "dir=in", "action=block", f"remoteip={target_ip}"
-                    ], capture_output=True, text=True)
-                if r1.returncode != 0:
-                    err_msg = (r1.stderr or r1.stdout or "").lower()
-                    if "elevation" in err_msg or "administrator" in err_msg or "access is denied" in err_msg:
-                        elevation_needed = True
-                        elevation_cmds.append(f"netsh advfirewall firewall add rule name=\"{rule_name}\" dir=out action=block remoteip={target_ip}")
-                        if containment_profile == "BIDIRECTIONAL_DROP":
-                            elevation_cmds.append(f"netsh advfirewall firewall add rule name=\"{rule_name}_in\" dir=in action=block remoteip={target_ip}")
+            if admin_mode:
+                # Direct instant execution without prompting UAC
+                if is_domain and domain:
+                    sinkhole_domain(domain, remove=False)
+                for target_ip in valid_ips:
+                    rule_name = f"MiniSOC_EDR_Drop_{target_ip.replace(':', '_')}"
+                    silent_run(["netsh", "advfirewall", "firewall", "add", "rule", f"name={rule_name}", "dir=out", "action=block", f"remoteip={target_ip}"], capture_output=True)
+                    if containment_profile == "BIDIRECTIONAL_DROP":
+                        silent_run(["netsh", "advfirewall", "firewall", "add", "rule", f"name={rule_name}_in", "dir=in", "action=block", f"remoteip={target_ip}"], capture_output=True)
+                log_msg(f"[!] Active Defense: Target {target_str} ({len(valid_ips)} IPs) dropped directly via Administrator privileges.")
+                return f"Blocked {target_str} ({len(valid_ips)} IPs)"
+            else:
+                # Unified elevated PowerShell execution with -EncodedCommand (Single prompt, zero quote errors!)
+                ps_lines = []
+                if is_domain and domain:
+                    variants = [domain]
+                    if domain.startswith("www."):
+                        variants.append(domain[4:])
+                    else:
+                        variants.append(f"www.{domain}")
+                    variants = list(dict.fromkeys(variants))
+                    ps_lines.append('$p = "$env:SystemRoot\\System32\\drivers\\etc\\hosts"')
+                    ps_filter = " -and ".join([f"$_ -notmatch [regex]::Escape('{v}')" for v in variants])
+                    ps_lines.append(f"$c = (Get-Content $p | Where-Object {{ {ps_filter} }})")
+                    ps_lines.append("Set-Content -Path $p -Value $c -Force")
+                    entries = "`n".join([f"0.0.0.0 {v}`n::1 {v}" for v in variants])
+                    ps_lines.append(f"$entry = \"`n# TRISHUL EDR Block: {domain}`n{entries}\"")
+                    ps_lines.append("Add-Content -Path $p -Value $entry")
+                    ps_lines.append("ipconfig /flushdns")
 
-            if elevation_needed and elevation_cmds:
-                batched_ps = "; ".join(elevation_cmds)
-                ps_cmd = f"Start-Process powershell -ArgumentList '-NoProfile -ExecutionPolicy Bypass -Command \"{batched_ps}\"' -Verb RunAs -WindowStyle Hidden"
-                silent_run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_cmd], capture_output=True)
-                log_msg(f"[!] Active Defense: Requested elevation for batch Windows Firewall drop on {len(valid_ips)} IPs.")
+                for target_ip in valid_ips:
+                    rule_name = f"MiniSOC_EDR_Drop_{target_ip.replace(':', '_')}"
+                    ps_lines.append(f'netsh advfirewall firewall add rule name="{rule_name}" dir=out action=block remoteip={target_ip}')
+                    if containment_profile == "BIDIRECTIONAL_DROP":
+                        ps_lines.append(f'netsh advfirewall firewall add rule name="{rule_name}_in" dir=in action=block remoteip={target_ip}')
+
+                combined_ps = "\n".join(ps_lines)
+                run_elevated_powershell(combined_ps)
+                log_msg(f"[!] Active Defense: Executed unified elevation for {target_str} (hosts sinkhole + {len(valid_ips)} firewall drops).")
                 return f"Blocked {len(valid_ips)} IPs + {domain or ''} (elevation requested)"
 
         elif system == "Linux":
+            if is_domain and domain:
+                sinkhole_domain(domain, remove=False)
             for target_ip in valid_ips:
                 silent_run(["iptables", "-A", "OUTPUT", "-d", target_ip, "-j", "DROP"], capture_output=True)
                 if containment_profile == "BIDIRECTIONAL_DROP":
@@ -1074,9 +1129,26 @@ def execute_remediation(action_payload, server_url=None):
         domain = action_payload.get("domain")
         original_target = action_payload.get("original_target")
         target_str = str(target or original_target or "").strip()
+        if "://" in target_str:
+            target_str = target_str.split("://", 1)[1]
+        if "/" in target_str:
+            target_str = target_str.split("/", 1)[0]
+        if target_str.count(":") == 1 and not target_str.startswith("["):
+            parts = target_str.rsplit(":", 1)
+            if parts[1].isdigit():
+                target_str = parts[0]
+
         is_domain = False
         if domain:
             is_domain = True
+            if "://" in domain:
+                domain = domain.split("://", 1)[1]
+            if "/" in domain:
+                domain = domain.split("/", 1)[0]
+            if domain.count(":") == 1 and not domain.startswith("["):
+                parts = domain.rsplit(":", 1)
+                if parts[1].isdigit():
+                    domain = parts[0]
         else:
             try:
                 ipaddress.ip_address(target_str)
@@ -1085,11 +1157,6 @@ def execute_remediation(action_payload, server_url=None):
                     domain = target_str
                     is_domain = True
 
-        # 1. Remove Layer 7 DNS sinkhole
-        if is_domain and domain:
-            sinkhole_domain(domain, remove=True)
-
-        # 2. Gather all candidate IPs
         ip_set = set()
         if target:
             ip_set.add(str(target).strip())
@@ -1111,33 +1178,53 @@ def execute_remediation(action_payload, server_url=None):
             except ValueError:
                 pass
 
-        elevation_needed = False
-        elevation_cmds = []
+        admin_mode = is_admin()
 
         if system == "Windows":
-            for target_ip in valid_ips:
-                rule_name = f"MiniSOC_EDR_Drop_{target_ip.replace(':', '_')}"
-                r1 = silent_run(["netsh", "advfirewall", "firewall", "delete", "rule", f"name={rule_name}"], capture_output=True, text=True)
-                r2 = silent_run(["netsh", "advfirewall", "firewall", "delete", "rule", f"name={rule_name}_in"], capture_output=True, text=True)
-                if (r1.returncode != 0 or r2.returncode != 0):
-                    err_msg = ((r1.stderr or '') + (r2.stderr or '')).lower()
-                    if "elevation" in err_msg or "administrator" in err_msg or "access is denied" in err_msg:
-                        elevation_needed = True
-                        elevation_cmds.append(f"netsh advfirewall firewall delete rule name=\"{rule_name}\"")
-                        elevation_cmds.append(f"netsh advfirewall firewall delete rule name=\"{rule_name}_in\"")
+            if admin_mode:
+                if is_domain and domain:
+                    sinkhole_domain(domain, remove=True)
+                for target_ip in valid_ips:
+                    rule_name = f"MiniSOC_EDR_Drop_{target_ip.replace(':', '_')}"
+                    silent_run(["netsh", "advfirewall", "firewall", "delete", "rule", f"name={rule_name}"], capture_output=True)
+                    silent_run(["netsh", "advfirewall", "firewall", "delete", "rule", f"name={rule_name}_in"], capture_output=True)
+                log_msg(f"[+] Active Defense: Local firewall drop & sinkhole removed for {target_str} ({len(valid_ips)} IPs).")
+                return f"Target {target_str} unblocked locally"
+            else:
+                ps_lines = []
+                if is_domain and domain:
+                    variants = [domain]
+                    if domain.startswith("www."):
+                        variants.append(domain[4:])
+                    else:
+                        variants.append(f"www.{domain}")
+                    variants = list(dict.fromkeys(variants))
+                    ps_lines.append('$p = "$env:SystemRoot\\System32\\drivers\\etc\\hosts"')
+                    ps_filter = " -and ".join([f"$_ -notmatch [regex]::Escape('{v}')" for v in variants])
+                    ps_lines.append(f"$c = (Get-Content $p | Where-Object {{ {ps_filter} }})")
+                    ps_lines.append("Set-Content -Path $p -Value $c -Force")
+                    ps_lines.append("ipconfig /flushdns")
 
-            if elevation_needed and elevation_cmds:
-                batched_ps = "; ".join(elevation_cmds)
-                ps_cmd = f"Start-Process powershell -ArgumentList '-NoProfile -ExecutionPolicy Bypass -Command \"{batched_ps}\"' -Verb RunAs -WindowStyle Hidden"
-                silent_run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_cmd], capture_output=True)
+                for target_ip in valid_ips:
+                    rule_name = f"MiniSOC_EDR_Drop_{target_ip.replace(':', '_')}"
+                    ps_lines.append(f'netsh advfirewall firewall delete rule name="{rule_name}"')
+                    ps_lines.append(f'netsh advfirewall firewall delete rule name="{rule_name}_in"')
+
+                combined_ps = "\n".join(ps_lines)
+                run_elevated_powershell(combined_ps)
+                log_msg(f"[+] Active Defense: Requested elevated removal of sinkhole & {len(valid_ips)} firewall rules for {target_str}.")
+                return f"Target {target_str} unblocked locally"
 
         elif system == "Linux":
+            if is_domain and domain:
+                sinkhole_domain(domain, remove=True)
             for target_ip in valid_ips:
                 silent_run(["iptables", "-D", "OUTPUT", "-d", target_ip, "-j", "DROP"], capture_output=True)
                 silent_run(["iptables", "-D", "INPUT", "-s", target_ip, "-j", "DROP"], capture_output=True)
 
         log_msg(f"[+] Active Defense: Local firewall drop & sinkhole removed for {target_str} ({len(valid_ips)} IPs).")
         return f"Target {target_str} unblocked locally"
+
 
         
     elif action == "isolate_host":
@@ -1223,7 +1310,12 @@ def send_telemetry(server_url):
                 if "profile" in res_data:
                     sync_profile(res_data["profile"])
                 if "command" in res_data:
-                    execute_remediation(res_data["command"], server_url=server_url)
+                    c_payload = res_data["command"]
+                    if isinstance(c_payload, list):
+                        for single_c in c_payload:
+                            execute_remediation(single_c, server_url=server_url)
+                    else:
+                        execute_remediation(c_payload, server_url=server_url)
                 return True, "Telemetry delivered"
     except Exception as e:
         return False, str(e)
