@@ -532,18 +532,27 @@ def handle_manual_block():
     if ip:
         res = block_ip(ip, reason=reason, containment_profile=containment_profile)
         resolved_ips = res.get('resolved_ips') or [ip]
-        # Push proactive EDR drop rule down to all active endpoint agents for each resolved IP
+        clean_target = ip.strip()
+        if '://' in clean_target:
+            clean_target = clean_target.split('://', 1)[1]
+        if '/' in clean_target:
+            clean_target = clean_target.split('/', 1)[0]
+        if clean_target.count(':') == 1 and not clean_target.startswith('['):
+            clean_target = clean_target.split(':', 1)[0]
+
+        # Push proactive EDR drop rule down to ALL enrolled endpoints
+        cmd_json = json.dumps({
+            "action": "block_remote_ip",
+            "target": resolved_ips[0] if resolved_ips else ip,
+            "targets": resolved_ips,
+            "domain": clean_target if (clean_target and not clean_target[0].isdigit() and '.' in clean_target) else None,
+            "original_target": ip,
+            "reason": reason,
+            "containment_profile": containment_profile
+        })
         conn = get_conn()
         try:
-            for rip in resolved_ips:
-                cmd_json = json.dumps({
-                    "action": "block_remote_ip",
-                    "target": rip,
-                    "original_target": ip,
-                    "reason": reason,
-                    "containment_profile": containment_profile
-                })
-                conn.execute("UPDATE endpoints SET pending_command=? WHERE status != 'OFFLINE'", (cmd_json,))
+            conn.execute("UPDATE endpoints SET pending_command=?", (cmd_json,))
             conn.commit()
         finally:
             conn.close()
@@ -577,12 +586,25 @@ def handle_unblock():
     if ip:
         res = unblock_ip(ip)
         resolved_ips = res.get('resolved_ips') or [ip]
-        # Push unblock command to active endpoints
+        clean_target = ip.strip()
+        if '://' in clean_target:
+            clean_target = clean_target.split('://', 1)[1]
+        if '/' in clean_target:
+            clean_target = clean_target.split('/', 1)[0]
+        if clean_target.count(':') == 1 and not clean_target.startswith('['):
+            clean_target = clean_target.split(':', 1)[0]
+
+        # Push unblock command to all endpoints
+        cmd_json = json.dumps({
+            "action": "unblock_remote_ip",
+            "target": resolved_ips[0] if resolved_ips else ip,
+            "targets": resolved_ips,
+            "domain": clean_target if (clean_target and not clean_target[0].isdigit() and '.' in clean_target) else None,
+            "original_target": ip
+        })
         conn = get_conn()
         try:
-            for rip in resolved_ips:
-                cmd_json = json.dumps({"action": "unblock_remote_ip", "target": rip})
-                conn.execute("UPDATE endpoints SET pending_command=? WHERE status != 'OFFLINE'", (cmd_json,))
+            conn.execute("UPDATE endpoints SET pending_command=?", (cmd_json,))
             conn.commit()
         finally:
             conn.close()
