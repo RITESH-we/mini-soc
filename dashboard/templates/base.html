@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>TRISHULA Enterprise — {% block title %}Operations{% endblock %}</title>
+  <title>TRISHUL Enterprise — {% block title %}Operations{% endblock %}</title>
   
   <!-- Professional Fonts: Inter & JetBrains Mono -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -315,7 +315,7 @@
         </svg>
       </div>
       <div class="d-flex flex-column">
-        <span class="lh-1" style="font-weight: 700; letter-spacing: 0.08em;">TRISHULA</span>
+        <span class="lh-1" style="font-weight: 700; letter-spacing: 0.08em;">TRISHUL</span>
         <span class="text-muted" style="font-size: 0.62rem; letter-spacing: 0.12em;">ENTERPRISE XDR // SIEM</span>
       </div>
     </a>
@@ -388,7 +388,7 @@
       </div>
       <div class="modal-body p-3">
         <div class="p-2 mb-3 rounded border d-flex flex-wrap justify-content-between align-items-center gap-2 font-mono" style="background: rgba(0,0,0,0.4); border-color: var(--border-subtle); font-size: 0.76rem;">
-          <div><span class="text-muted">BUILD:</span> <strong class="text-light" id="health-platform">TRISHULA Enterprise v2.4</strong></div>
+          <div><span class="text-muted">BUILD:</span> <strong class="text-light" id="health-platform">TRISHUL Enterprise v2.4</strong></div>
           <div><span class="text-muted">QUERY LATENCY:</span> <strong class="text-warning" id="health-latency">-- ms</strong></div>
           <div><span class="text-muted">SYNCHRONIZED:</span> <span class="text-info" id="health-timestamp">--:--:--</span></div>
           <button class="btn btn-xs btn-outline-info py-0 px-2" style="font-size: 0.72rem;" onclick="refreshHealthData()">
@@ -458,7 +458,7 @@ function refreshHealthData() {
     .then(data => {
       document.getElementById('health-overall-badge').className = 'badge font-mono ' + (data.overall_status === 'HEALTHY' ? 'bg-success text-dark' : 'bg-danger text-light');
       document.getElementById('health-overall-badge').textContent = data.overall_status;
-      document.getElementById('health-platform').textContent = "TRISHULA Enterprise v2.4";
+      document.getElementById('health-platform').textContent = "TRISHUL Enterprise v2.4";
       document.getElementById('health-latency').textContent = data.query_latency_ms + ' ms';
       document.getElementById('health-timestamp').textContent = (data.timestamp || '').slice(11, 19);
 

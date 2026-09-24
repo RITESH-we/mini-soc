@@ -1,5 +1,5 @@
-# 🔱 TRISHULA Enterprise v2.4 — Cloud-Ready SIEM, XDR & UEBA Platform
-### Threat Recognition, Incident Surveillance & Host Unified Lockdown Architecture
+# 🔱 TRISHUL Enterprise v2.4 — Cloud-Ready SIEM, XDR & UEBA Platform
+### Threat Recognition, Incident Surveillance & Host Unified Lockdown
 *Synthesizing Ancient Sanatana-Vedic Vigilance with Greek Mythic Defense into a Modern Zero-Evasion Security Fabric*
 
 [![Python](https://img.shields.io/badge/Python-3.11+-blue.svg?logo=python&logoColor=white)](https://www.python.org/)
@@ -8,20 +8,20 @@
 [![Schema](https://img.shields.io/badge/Schema-OCSF%20%2F%20ECS-blueviolet.svg)](https://schema.ocsf.io)
 [![CI Pipeline](https://img.shields.io/badge/CI-GitHub_Actions_100%25_Passing-success.svg)](.github/workflows/ci.yml)
 [![Anti-Evasion](https://img.shields.io/badge/Anti--Evasion-De--obfuscation_%7C_Canary_%7C_Masquerading-orange.svg)](#-enterprise-multi-vector-defense--anti-evasion-fabric)
-[![Active Scanning](https://img.shields.io/badge/Network-Active_Subnet_Scanner-informational.svg)](#-active-subnet-ip--port-discovery-scanner)
+[![Live Demo](https://img.shields.io/badge/Cloud_Demo-Live_on_Render-success.svg)](https://trishula-soc.onrender.com)
 [![License: MIT](https://img.shields.io/badge/License-MIT-lightgrey.svg)](LICENSE)
 
 ---
 
-## 🏛️ The Mythos & Identity: What is TRISHULA?
+## 🏛️ The Mythos & Identity: What is TRISHUL?
 
-**TRISHULA** is an enterprise-grade, cloud-ready Security Operations Center (SOC) Level 1/2 monitoring, orchestration, and active defense platform.
+**TRISHUL** is an enterprise-grade, cloud-ready Security Operations Center (SOC) Level 1/2 monitoring, orchestration, and active defense platform.
 
 The platform draws its identity from two ancient traditions of eternal vigilance:
-* **The Sanatana (Vedic) Trishula (त्रिशूल)**: The primordial three-pointed trident of cosmic order and truth. The three prongs represent the three indivisible pillars of modern cybersecurity:
-  1. **Endpoint XDR** (Deep Process Lineage, Parent-PID Tracking, Honey-Token Deception Traps)
-  2. **Network NSM** (Passive Socket Inspection, Stealth Port-Sweep Detection, Active Subnet Discovery)
-  3. **Cloud SIEM & SOAR** (MITRE ATT&CK v14 Correlation, Automated Firewall Containment, Nova AI Analyst)
+* **The Sanatana (Vedic) Trishul (त्रिशूल)**: The primordial three-pointed trident of cosmic order and truth. The three prongs represent the three indivisible pillars of modern cybersecurity:
+  1. **Endpoint XDR** (Deep Process Lineage, Parent-PID Tracking, Honey-Token Deception Traps, Dual-Layer Containment)
+  2. **Network NSM** (Passive Socket Inspection, Stealth Port-Sweep Detection, Active Subnet Discovery, Per-Endpoint IPS)
+  3. **Cloud SIEM & SOAR** (MITRE ATT&CK v14 Correlation, Sliding-Window Alert De-duplication, Nova AI Analyst)
 * **The Greek Trident & Aegis**: Mirroring the ancient sea-sovereign's trident and the unyielding celestial shield (*Aegis*) that no mortal or titan could pierce.
 
 ### 📐 The Technical Acronym:
@@ -32,24 +32,25 @@ The platform draws its identity from two ancient traditions of eternal vigilance
 * **H** — **Host**
 * **U** — **Unified**
 * **L** — **Lockdown**
-* **A** — **Architecture**
 
 ---
 
 ## 🛡️ Enterprise Multi-Vector Defense & Anti-Evasion Fabric
 
-Modern adversaries rarely attack from a single vector or execute plain `.exe` files. **TRISHULA** features 10 coordinated anti-evasion layers engineered specifically to neutralize stealth tactics:
+Modern adversaries rarely attack from a single vector or execute plain `.exe` files. **TRISHUL** features coordinated anti-evasion layers engineered specifically to neutralize stealth tactics:
 
 | Anti-Evasion Capability | Adversary Deception Technique Defeated | Technical Implementation | MITRE ATT&CK |
 | :--- | :--- | :--- | :--- |
 | **Deep Process Lineage** | **Process Masquerading**: Renaming malware to `svchost.exe` running from `AppData` or `Temp`. | Queries `Win32_Process` via PowerShell/WMI to extract full `ExecutablePath`, `CommandLine`, `ParentProcessId` (PPID), and memory footprint. Flags any system binary running outside `System32`. | **T1036.005** |
+| **Dual-Layer Containment** | **Anycast & DNS Evasion**: Web domains cycling IPs or bypassing standard firewalls. | Enforces **Layer 7 OS `hosts` sinkholing** (`0.0.0.0 <domain>` + `ipconfig /flushdns`) combined with **Layer 3/4 local Anycast IP drops** in Windows Firewall. | **T1071.001** |
+| **Targeted Per-Endpoint IPS** | **Localized Threats**: Stopping lateral movement or C2 on a single compromised workstation without disrupting the fleet. | Analysts can enforce IPS drops **Globally** across all enrolled nodes or selectively target an individual host directly from Network & IPS or Endpoint Fleet views. | **T1562.004** |
+| **Alert Fatigue De-Duplication** | **Alert Storms**: Repeated failed logins or polling floods overwhelming SOC analysts. | 15-minute sliding-window de-duplication engine increments repetition counters (`[Repeated Nx]`), updates timestamps, and suppresses redundant alerts. | **SOC Ops** |
+| **Brute-Force Thresholding** | **Mistyped Passwords**: Single accidental password mistypes triggering false positive alarms. | Suppresses isolated logon failures; strictly requires $\ge 4$ failed attempts within 5 minutes on a host before escalating to a High-severity Brute-Force alert. | **T1110.001** |
 | **Base64 De-obfuscation** | **Obfuscated PowerShell**: Hiding download cradles inside `-enc` or `-encodedcommand`. | Transparent real-time UTF-16LE Base64 decoder unwraps payloads in memory and audits the raw script block against attack signatures. | **T1059.001** |
 | **Multi-Channel Windows Auditing** | **Blind Spot Exploitation**: Attacking services or wiping logs to blind security agents. | Ingests `Security`, `System` (Services & Log Clearing), `PowerShell/Operational`, and `Windows Defender/Operational` with a high-capacity 50-event batch window. | **T1070.001 / T1543.003** |
 | **Deception Honey-Tokens** | **Credential Stealers & Ransomware**: Adversaries scraping local files for passwords. | Plants a monitored canary credential vault (`minisoc_vault_creds.db`). Any unauthorized read, modification, or deletion fires an immediate **CRITICAL** containment alert. | **T1081** |
 | **Persistence Watcher** | **Reboot Backdoors**: Modifying registry autorun keys to survive endpoint restarts. | Continuously audits `HKCU` and `HKLM` Windows Run keys and Startup directories. New additions trigger instant escalation. | **T1547.001** |
-| **USB Media Monitor** | **Physical Access & BadUSB**: Rubber Ducky / rogue thumb drives inserted into hosts. | Monitors `Win32_DiskDrive` for new USB bus arrivals and logs serial/hardware identifiers. | **T1091** |
 | **Stealth Port Sweep NSM** | **Low-and-Slow Scans**: Scanning 1 port every 15s to bypass short rate-limit windows. | Extended 60-second sliding inspection window with a lowered 4-port threshold across sensitive management ports (`22, 445, 3389, 5985, 1433, 3306, 6379`). | **T1046** |
-| **DNS Tunneling & DGA** | **Covert C2 Exfiltration**: Smuggling stolen data through DNS `UDP 53` queries. | Calculates Shannon character entropy and evaluates domain nesting depth (>3 subdomains, entropy >3.8) to catch covert channels. | **T1071.004** |
 | **Active Subnet Discovery** | **Rogue & Unmanaged Devices**: Shadow IT or unauthorized machines plugged into the LAN. | Multi-threaded `/24` subnet sweeper built into `/network` that probes live hosts and open ports across the entire local IP range. | **T1595** |
 | **Multi-Vector Correlator** | **Multi-Stage Attacks**: Phishing &rarr; Credential Theft &rarr; Lateral Movement. | Automatically correlates events spanning multiple MITRE tactics within 15 minutes into unified High-Severity Incidents. | **Multi-Tactic** |
 
@@ -58,7 +59,7 @@ Modern adversaries rarely attack from a single vector or execute plain `.exe` fi
 ## 🏗️ Distributed System Architecture
 
 ```
-                       [ Distributed TRISHULA Agents ]           [ Cloud & Syslog Webhooks ]
+                       [ Distributed TRISHUL Agents ]            [ Cloud & Syslog Webhooks ]
                         (Processes, Lineage, Sockets,             (AWS, GCP, Azure, Syslog)
                          Canary, USB, Multi-Channel EVTX)                     │
                                     │                                         │
@@ -72,6 +73,7 @@ Modern adversaries rarely attack from a single vector or execute plain `.exe` fi
                                         │    Detection & UEBA Engine    │
                                         │    • Dynamic Host & User Risk │
                                         │    • MITRE ATT&CK Matrix v14  │
+                                        │    • 15m Sliding De-duplicator│
                                         │    • Multi-Vector Correlator  │
                                         └───────────────┬───────────────┘
                                                        │
@@ -79,15 +81,16 @@ Modern adversaries rarely attack from a single vector or execute plain `.exe` fi
                            ▼                                                       ▼
                ┌───────────────────────┐                               ┌───────────────────────┐
                │   Threat Intel Hub    │                               │  Active SOAR Defense  │
-               │  • VirusTotal v3      │                               │  • Auto Host Firewall │
-               │  • AbuseIPDB v2       │                               │    Drops (netsh/ipt)  │
+               │  • RFC 1918 Guard     │                               │  • Dual-Layer Contain │
+               │  • VirusTotal v3      │                               │    (L7 Hosts + L3/4)  │
+               │  • AbuseIPDB v2       │                               │  • Per-Endpoint Scope │
                │  • ThreatFox (abuse)  │                               │  • 1-Click Quarantine │
                │  • AlienVault OTX     │                               │  • Remote Process Kill│
                └───────────┬───────────┘                               └───────────────────────┘
                            │
                            ▼
           ┌─────────────────────────────────────────────────────────────────┐
-          │                  TRISHULA Web Operations Center                 │
+          │                   TRISHUL Web Operations Center                 │
           ├────────────────────────────────┬────────────────────────────────┤
           │  Analyst Triage & Event Feed   │  🤖 Nova AI Analyst Co-Pilot   │
           │  Active Subnet & NSM Monitor   │  Autonomous RCA Briefings      │
@@ -147,40 +150,38 @@ cp config.example.yaml config.yaml
 ```bash
 python dashboard/app.py
 ```
-Console is accessible at: **`http://127.0.0.1:5000`**
+Console is accessible at: **`http://127.0.0.1:5000`** (or your live cloud URL: **`https://trishula-soc.onrender.com`**).
 
 ---
 
 ## 🔐 Authentication & Role-Based Access Control (RBAC)
 
-TRISHULA features role-based access control with timing-safe SHA-256 password hashing.
+TRISHUL features role-based access control with timing-safe SHA-256 password hashing.
 
 | Role Profile | Access Level | Operational Capabilities |
 | :--- | :--- | :--- |
 | **`admin`** | **SOC Administrator** | Full fleet policy control, firewall containment drops, host quarantine, settings |
 | **`analyst`** | **Security Analyst** | L1/L2 Alert triage, deep forensic inspection, IOC enrichment, incident escalation |
 
-> ⚠️ **IMPORTANT**: On first deployment, authenticate using the initial credentials initialized during database setup and **immediately navigate to settings or database management to rotate your passwords**.
-
 ---
 
-## 📡 Deploying the TRISHULA Endpoint Agent
+## 📡 Deploying the TRISHUL Endpoint Agent
 
 The endpoint agent is lightweight, cross-platform, and zero-dependency.
 
 ### Interactive Mode (Testing & Audits):
 ```powershell
-python agent/endpoint_agent.py http://<YOUR_SOC_SERVER_IP>:5000/api/v1/telemetry --profile audit_friend
+python agent/endpoint_agent.py https://trishula-soc.onrender.com/api/v1/telemetry --profile standard_workstation
 ```
 
 ### Agent Policy Profiles:
-* **`audit_friend` (Safe Telemetry Mode)**: Full log harvesting and event shipping; automatically suppresses disruptive actions (no automated firewall drops or process kills on friend/colleague laptops).
 * **`standard_workstation` (Balanced EDR)**: Standard 15-second heartbeat with automated malware and ransomware containment drops.
 * **`high_security_server` (Maximum Vigilance)**: Accelerated 5-second heartbeat, strict network surveillance, and immediate host quarantine upon critical detection.
+* **`audit_friend` (Safe Telemetry Mode)**: Full log harvesting and event shipping; automatically suppresses disruptive actions (no automated firewall drops or process kills on friend/colleague laptops).
 
-### Persistent Daemon (Survives Reboots):
-* **Windows**: Double-click `agent\install_windows.bat` (Registers elevated background scheduled task).
-* **Linux**: `sudo bash agent/install_linux.sh http://<YOUR_SOC_SERVER_IP>:5000/api/v1/telemetry` (Registers systemd daemon).
+### Persistent Service Installation (Survives Reboots):
+* **Windows**: Right-click `agent\install_windows.bat` &rarr; **Run as administrator** (Registers elevated Windows Task Scheduler daemon with `HIGHEST` privileges).
+* **Linux**: `sudo bash agent/install_linux.sh https://trishula-soc.onrender.com/api/v1/telemetry` (Registers systemd daemon).
 
 ---
 
@@ -201,11 +202,14 @@ Execute proactive, hypothesis-driven hunts across live endpoint telemetry tables
 
 ## 🧪 Automated Testing & Verification
 
-TRISHULA is continuously verified by an automated test suite integrated into GitHub Actions CI:
+TRISHUL is continuously verified by an automated test suite integrated into GitHub Actions CI:
 
 ```powershell
 # Run Multi-Vector & Anti-Evasion Test Suite:
 python scripts/test_anti_evasion.py
+
+# Run RFC 1918 Guard & De-Duplication Verification Suite:
+python scripts/test_rf1918_and_dedup.py
 
 # Run Flask Route & Auth Smoke Tests:
 python scripts/ci_smoke_test.py

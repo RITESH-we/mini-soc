@@ -49,6 +49,9 @@ def init_db():
         if block_cols and 'containment_profile' not in block_cols:
             conn.execute("ALTER TABLE blocked_ips ADD COLUMN containment_profile TEXT DEFAULT 'BIDIRECTIONAL_DROP'")
             conn.commit()
+        if block_cols and 'target_endpoint' not in block_cols:
+            conn.execute("ALTER TABLE blocked_ips ADD COLUMN target_endpoint TEXT DEFAULT 'GLOBAL'")
+            conn.commit()
     except Exception:
         pass
 

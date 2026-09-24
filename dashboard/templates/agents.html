@@ -83,6 +83,9 @@
               <button class="btn btn-sm btn-outline-info py-0.5 px-2 font-mono me-1" style="font-size: 0.72rem;" onclick="viewEndpointLogs('{{ ep.hostname }}')">
                 <i class="bi bi-terminal"></i> Telemetry
               </button>
+              <button class="btn btn-sm btn-outline-warning py-0.5 px-2 font-mono me-1" style="font-size: 0.72rem;" onclick="promptBlockIp('{{ ep.hostname }}')">
+                <i class="bi bi-shield-x"></i> Block IP
+              </button>
               {% if ep.status == 'ISOLATED' %}
               <button class="btn btn-sm btn-success py-0.5 px-2 font-mono" style="font-size: 0.72rem;" onclick="restoreHost('{{ ep.hostname }}')">
                 <i class="bi bi-unlock"></i> Restore
@@ -353,7 +356,30 @@ function setEndpointProfile(hostname, profile) {
       alert(`Failed to update profile: ${d.error || 'Unknown error'}`);
     }
   })
-  .catch(err => alert('Network error: ' + err));
+function promptBlockIp(hostname) {
+  const target = prompt(`Enter IP address or Domain to block specifically on '${hostname}':`);
+  if (!target || !target.trim()) return;
+  const reason = prompt("Enter justification / reason:", `Analyst targeted containment on ${hostname}`) || `Targeted containment on ${hostname}`;
+  fetch('/api/network/block', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      ip: target.trim(),
+      reason: reason,
+      endpoint_scope: hostname,
+      containment_profile: 'BIDIRECTIONAL_DROP'
+    })
+  })
+  .then(r => r.json())
+  .then(d => {
+    if (d.success) {
+      alert(`[+] Proactive Drop Command Queued!\n\nTarget: ${target.trim()}\nEndpoint Scope: ${hostname}\n\nThe agent on '${hostname}' will apply the firewall drop rule on its next heartbeat.`);
+    } else {
+      alert(`[-] Failed to queue command: ${d.message || 'Unknown error'}`);
+    }
+  })
+  .catch(err => alert("Error dispatching block command: " + err));
 }
 </script>
 {% endblock %}
+

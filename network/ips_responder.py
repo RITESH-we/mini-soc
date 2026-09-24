@@ -97,10 +97,11 @@ def resolve_target_to_ips(target: str) -> list:
     except Exception:
         return [clean]
 
-def block_ip(ip: str, reason: str = "MiniSOC Automated IPS Rule", containment_profile: str = "BIDIRECTIONAL_DROP") -> dict:
+def block_ip(ip: str, reason: str = "MiniSOC Automated IPS Rule", containment_profile: str = "BIDIRECTIONAL_DROP", target_endpoint: str = "GLOBAL") -> dict:
     """
     Active defense: applies host firewall blocking rule for malicious remote IP or domain.
     Supported containment profiles: 'BIDIRECTIONAL_DROP' (in+out), 'OUTBOUND_C2_DROP' (out only).
+    Target endpoint: 'GLOBAL' (all fleet) or specific hostname (e.g. 'DESKTOP-ABC').
     """
     if not ip or not isinstance(ip, str):
         return {"success": False, "message": "Invalid or empty target specified."}
@@ -116,6 +117,7 @@ def block_ip(ip: str, reason: str = "MiniSOC Automated IPS Rule", containment_pr
     system = platform.system()
     flags = get_hidden_subprocess_flags()
     blocked_records = []
+    target_endpoint = (target_endpoint or "GLOBAL").strip()
 
     for target_ip in resolved_ips:
         if target_ip in ('127.0.0.1', 'localhost', '::1', '0.0.0.0'):
@@ -151,7 +153,7 @@ def block_ip(ip: str, reason: str = "MiniSOC Automated IPS Rule", containment_pr
         except Exception:
             pass
 
-        # 2. Store in database
+        # 2. Store in database with target_endpoint scope
         target_reason = reason
         if raw_clean != target_ip:
             target_reason = f"{reason} (Target: {raw_clean})"
@@ -159,14 +161,15 @@ def block_ip(ip: str, reason: str = "MiniSOC Automated IPS Rule", containment_pr
         conn = get_conn()
         try:
             conn.execute("""
-                INSERT INTO blocked_ips (ip_address, reason, blocked_at, active, containment_profile)
-                VALUES (?, ?, ?, 1, ?)
+                INSERT INTO blocked_ips (ip_address, reason, blocked_at, active, containment_profile, target_endpoint)
+                VALUES (?, ?, ?, 1, ?, ?)
                 ON CONFLICT(ip_address) DO UPDATE SET
                     reason=excluded.reason,
                     blocked_at=excluded.blocked_at,
                     active=1,
-                    containment_profile=excluded.containment_profile
-            """, (target_ip, target_reason, datetime.now().isoformat(), containment_profile))
+                    containment_profile=excluded.containment_profile,
+                    target_endpoint=excluded.target_endpoint
+            """, (target_ip, target_reason, datetime.now().isoformat(), containment_profile, target_endpoint))
             conn.commit()
             blocked_records.append(target_ip)
         finally:
@@ -174,11 +177,12 @@ def block_ip(ip: str, reason: str = "MiniSOC Automated IPS Rule", containment_pr
 
     return {
         "success": len(blocked_records) > 0,
-        "message": f"Blocked {len(blocked_records)} target(s): {', '.join(blocked_records)} ({containment_profile}).",
-        "resolved_ips": blocked_records
+        "message": f"Blocked {len(blocked_records)} target(s): {', '.join(blocked_records)} ({containment_profile}) on scope [{target_endpoint}].",
+        "resolved_ips": blocked_records,
+        "target_endpoint": target_endpoint
     }
 
-def unblock_ip(ip: str) -> dict:
+def unblock_ip(ip: str, target_endpoint: str = None) -> dict:
     if not ip or not isinstance(ip, str):
         return {"success": False, "message": "Invalid target specified."}
 

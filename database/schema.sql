@@ -63,7 +63,8 @@ CREATE TABLE IF NOT EXISTS blocked_ips (
     reason              TEXT,
     blocked_at          TEXT,
     active              INTEGER DEFAULT 1,
-    containment_profile TEXT DEFAULT 'BIDIRECTIONAL_DROP'
+    containment_profile TEXT DEFAULT 'BIDIRECTIONAL_DROP',
+    target_endpoint     TEXT DEFAULT 'GLOBAL'
 );
 
 CREATE TABLE IF NOT EXISTS endpoints (

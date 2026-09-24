@@ -962,6 +962,13 @@ def execute_remediation(action_payload, server_url=None):
         sync_profile(action_payload.get("profile"))
         return f"Profile updated to {CURRENT_PROFILE}"
 
+    endpoint_scope = action_payload.get("endpoint_scope")
+    if endpoint_scope and endpoint_scope not in ("GLOBAL", "ALL", ""):
+        my_host = get_system_info().get("hostname", "")
+        if endpoint_scope.lower() != my_host.lower():
+            log_msg(f"[*] Suppressed command intended for endpoint '{endpoint_scope}' (this host: '{my_host}')")
+            return f"Skipped (targeted at {endpoint_scope})"
+
     # ── audit_friend safe-mode: suppress disruptive automated actions ──────────
     DISRUPTIVE_ACTIONS = {"kill_process", "block_remote_ip"}
     if CURRENT_PROFILE == "audit_friend" and action in DISRUPTIVE_ACTIONS:

@@ -516,7 +516,12 @@ def network_view():
     net_alerts = get_recent_network_alerts(limit=50)
     blocked = list_blocked_ips()
     active_blocked = set(b['ip_address'] for b in blocked if b.get('active') == 1)
-    return render_template('network.html', net_alerts=net_alerts, blocked_ips=blocked, active_blocked=active_blocked)
+    conn = get_conn()
+    try:
+        endpoints = conn.execute("SELECT hostname, ip_address, status FROM endpoints ORDER BY hostname ASC").fetchall()
+    finally:
+        conn.close()
+    return render_template('network.html', net_alerts=net_alerts, blocked_ips=blocked, active_blocked=active_blocked, endpoints=endpoints)
 
 @app.route('/network/block', methods=['POST'])
 @app.route('/api/network/block', methods=['POST'])
@@ -527,10 +532,11 @@ def handle_manual_block():
     ip = (req_json.get('ip') or req_json.get('ip_address') or request.form.get('ip') or request.form.get('ip_address') or '').strip()
     reason = req_json.get('reason') or request.form.get('reason', 'Analyst Manual Block')
     containment_profile = req_json.get('containment_profile') or request.form.get('containment_profile', 'BIDIRECTIONAL_DROP')
+    endpoint_scope = (req_json.get('endpoint_scope') or req_json.get('hostname') or request.form.get('endpoint_scope') or request.form.get('hostname') or 'GLOBAL').strip()
     if containment_profile not in ['BIDIRECTIONAL_DROP', 'OUTBOUND_C2_DROP', 'HOST_QUARANTINE']:
         containment_profile = 'BIDIRECTIONAL_DROP'
     if ip:
-        res = block_ip(ip, reason=reason, containment_profile=containment_profile)
+        res = block_ip(ip, reason=reason, containment_profile=containment_profile, target_endpoint=endpoint_scope)
         resolved_ips = res.get('resolved_ips') or [ip]
         clean_target = ip.strip()
         if '://' in clean_target:
@@ -540,7 +546,7 @@ def handle_manual_block():
         if clean_target.count(':') == 1 and not clean_target.startswith('['):
             clean_target = clean_target.split(':', 1)[0]
 
-        # Push proactive EDR drop rule down to ALL enrolled endpoints
+        # Push proactive EDR drop rule down to specific endpoint or ALL enrolled endpoints
         cmd_json = json.dumps({
             "action": "block_remote_ip",
             "target": resolved_ips[0] if resolved_ips else ip,
@@ -548,16 +554,20 @@ def handle_manual_block():
             "domain": clean_target if (clean_target and not clean_target[0].isdigit() and '.' in clean_target) else None,
             "original_target": ip,
             "reason": reason,
-            "containment_profile": containment_profile
+            "containment_profile": containment_profile,
+            "endpoint_scope": endpoint_scope
         })
         conn = get_conn()
         try:
-            conn.execute("UPDATE endpoints SET pending_command=?", (cmd_json,))
+            if endpoint_scope not in ('GLOBAL', 'ALL', ''):
+                conn.execute("UPDATE endpoints SET pending_command=? WHERE hostname=?", (cmd_json, endpoint_scope))
+            else:
+                conn.execute("UPDATE endpoints SET pending_command=?", (cmd_json,))
             conn.commit()
         finally:
             conn.close()
     if request.is_json or request.path.startswith('/api/'):
-        return jsonify({'success': True, 'ip': ip, 'action': 'blocked', 'containment_profile': containment_profile, 'resolved_ips': res.get('resolved_ips', [ip]) if ip else []})
+        return jsonify({'success': True, 'ip': ip, 'action': 'blocked', 'containment_profile': containment_profile, 'endpoint_scope': endpoint_scope, 'resolved_ips': res.get('resolved_ips', [ip]) if ip else []})
     return redirect(url_for('network_view'))
 
 @app.route('/api/agents/<hostname>/profile', methods=['POST'])
@@ -583,8 +593,9 @@ def handle_unblock():
     if not isinstance(req_json, dict):
         req_json = {}
     ip = (req_json.get('ip') or req_json.get('ip_address') or request.form.get('ip') or request.form.get('ip_address') or '').strip()
+    endpoint_scope = (req_json.get('endpoint_scope') or req_json.get('hostname') or request.form.get('endpoint_scope') or request.form.get('hostname') or 'GLOBAL').strip()
     if ip:
-        res = unblock_ip(ip)
+        res = unblock_ip(ip, target_endpoint=endpoint_scope)
         resolved_ips = res.get('resolved_ips') or [ip]
         clean_target = ip.strip()
         if '://' in clean_target:
@@ -594,23 +605,28 @@ def handle_unblock():
         if clean_target.count(':') == 1 and not clean_target.startswith('['):
             clean_target = clean_target.split(':', 1)[0]
 
-        # Push unblock command to all endpoints
+        # Push unblock command to targeted endpoint or all endpoints
         cmd_json = json.dumps({
             "action": "unblock_remote_ip",
             "target": resolved_ips[0] if resolved_ips else ip,
             "targets": resolved_ips,
             "domain": clean_target if (clean_target and not clean_target[0].isdigit() and '.' in clean_target) else None,
-            "original_target": ip
+            "original_target": ip,
+            "endpoint_scope": endpoint_scope
         })
         conn = get_conn()
         try:
-            conn.execute("UPDATE endpoints SET pending_command=?", (cmd_json,))
+            if endpoint_scope not in ('GLOBAL', 'ALL', ''):
+                conn.execute("UPDATE endpoints SET pending_command=? WHERE hostname=?", (cmd_json, endpoint_scope))
+            else:
+                conn.execute("UPDATE endpoints SET pending_command=?", (cmd_json,))
             conn.commit()
         finally:
             conn.close()
     if request.is_json or request.path.startswith('/api/'):
-        return jsonify({'success': True, 'ip': ip, 'action': 'unblocked'})
+        return jsonify({'success': True, 'ip': ip, 'action': 'unblocked', 'endpoint_scope': endpoint_scope})
     return redirect(url_for('network_view'))
+
 
 @app.route('/api/network/inspect')
 def api_network_inspect():
