@@ -125,7 +125,14 @@
                 #{{ a.id }}
               </button>
             </td>
-            <td class="text-muted small font-mono">{{ a.timestamp[:19] }}</td>
+            <td class="text-muted small font-mono">
+              {{ a.timestamp[:19] }}
+              {% if a.last_seen and a.last_seen != a.timestamp %}
+                <div class="text-info" style="font-size: 0.65rem;" title="Aggregated occurrence">
+                  <i class="bi bi-clock-history me-1"></i>Last: {{ a.last_seen[11:19] }}
+                </div>
+              {% endif %}
+            </td>
             <td>
               <span class="badge font-mono border" style="background: rgba(255,255,255,0.03); border-color: var(--border-subtle); color: #38bdf8; font-size: 0.72rem;">
                 <i class="bi bi-pc-display me-1 text-muted"></i>{{ a.device_name or 'Localhost' }}
@@ -147,7 +154,14 @@
                 <span class="badge font-mono py-1" style="background: rgba(255,255,255,0.04); border: 1px solid var(--border-subtle); color: #94a3b8; font-size: 0.68rem;">GENERAL</span>
               {% endif %}
             </td>
-            <td><span class="fw-semibold text-light" style="font-size: 0.82rem;">{{ a.rule_name }}</span></td>
+            <td>
+              <span class="fw-semibold text-light" style="font-size: 0.82rem;">{{ a.rule_name }}</span>
+              {% if a.occurrence_count and a.occurrence_count > 1 %}
+                <span class="badge bg-secondary font-mono ms-1" style="font-size: 0.65rem; border: 1px solid rgba(255,255,255,0.15);" title="Deduplicated: {{ a.occurrence_count }} occurrences observed">
+                  <i class="bi bi-layers me-1"></i>{{ a.occurrence_count }}x
+                </span>
+              {% endif %}
+            </td>
             <td class="small font-mono text-muted">{{ a.mitre_technique or '-' }}</td>
             <td class="font-mono small text-info">{{ a.src_user or '-' }}</td>
             <td class="font-mono small text-warning">{{ a.src_ip or '-' }}</td>
@@ -204,6 +218,9 @@
                     <span class="badge bg-info text-dark font-monospace fw-bold">Wazuh-style Log Inspector</span>
                     <span class="text-light fw-bold">Alert #{{ a.id }} — {{ a.rule_name }}</span>
                     <span class="badge badge-{{ a.severity }}">{{ a.severity }}</span>
+                    {% if a.occurrence_count and a.occurrence_count > 1 %}
+                      <span class="badge bg-secondary font-monospace" title="Consolidated events"><i class="bi bi-layers me-1"></i>{{ a.occurrence_count }} occurrences</span>
+                    {% endif %}
                     <span class="text-muted small font-monospace">Host: <span class="text-warning">{{ a.device_name or 'Localhost' }}</span> | User: <span class="text-info">{{ a.src_user or '-' }}</span></span>
                   </div>
                   <ul class="nav nav-pills card-header-pills small" role="tablist">
@@ -445,6 +462,9 @@ function toggleInspector(aid) {
       const fields = [
         {k: "agent.name", v: d.device_name || "Localhost"},
         {k: "agent.ip", v: d.src_ip || "-"},
+        {k: "alert.occurrences", v: d.occurrence_count || 1},
+        {k: "alert.first_seen", v: d.timestamp || "-"},
+        {k: "alert.last_seen", v: d.last_seen || d.timestamp || "-"},
         {k: "rule.id", v: d.event_id || d.id},
         {k: "rule.level", v: d.severity},
         {k: "rule.category", v: d.threat_category || "GENERAL"},

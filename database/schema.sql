@@ -16,7 +16,9 @@ CREATE TABLE IF NOT EXISTS alerts (
     vt_score         TEXT,
     abuse_score      INTEGER,
     status           TEXT DEFAULT 'OPEN',
-    threat_category  TEXT DEFAULT 'GENERAL'
+    threat_category  TEXT DEFAULT 'GENERAL',
+    occurrence_count INTEGER DEFAULT 1,
+    last_seen        TEXT
 );
 
 CREATE TABLE IF NOT EXISTS incidents (

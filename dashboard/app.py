@@ -197,11 +197,12 @@ def export_alerts_csv():
 
     output = io.StringIO()
     writer = csv.writer(output)
-    writer.writerow(['ID', 'Timestamp', 'Device', 'Severity', 'Category', 'Rule Name', 'MITRE Technique', 'Target User', 'Source IP', 'VT Score', 'Abuse Score', 'Status', 'Description'])
+    writer.writerow(['ID', 'Timestamp', 'Last Seen', 'Occurrences', 'Device', 'Severity', 'Category', 'Rule Name', 'MITRE Technique', 'Target User', 'Source IP', 'VT Score', 'Abuse Score', 'Status', 'Description'])
     
     for r in rows:
         writer.writerow([
-            r['id'], r['timestamp'], r['device_name'] or 'Localhost',
+            r['id'], r['timestamp'], r['last_seen'] or r['timestamp'], r['occurrence_count'] if 'occurrence_count' in r.keys() and r['occurrence_count'] else 1,
+            r['device_name'] or 'Localhost',
             r['severity'], r.get('threat_category', 'GENERAL'), r['rule_name'], r['mitre_technique'] or 'N/A',
             r['src_user'] or '-', r['src_ip'] or '-', r['vt_score'] or '-',
             r['abuse_score'] if r['abuse_score'] is not None else '-',
@@ -529,17 +530,25 @@ def handle_manual_block():
     if containment_profile not in ['BIDIRECTIONAL_DROP', 'OUTBOUND_C2_DROP', 'HOST_QUARANTINE']:
         containment_profile = 'BIDIRECTIONAL_DROP'
     if ip:
-        block_ip(ip, reason=reason, containment_profile=containment_profile)
-        # Push proactive EDR drop rule down to all active endpoint agents
+        res = block_ip(ip, reason=reason, containment_profile=containment_profile)
+        resolved_ips = res.get('resolved_ips') or [ip]
+        # Push proactive EDR drop rule down to all active endpoint agents for each resolved IP
         conn = get_conn()
         try:
-            cmd_json = json.dumps({"action": "block_remote_ip", "target": ip, "reason": reason, "containment_profile": containment_profile})
-            conn.execute("UPDATE endpoints SET pending_command=? WHERE status != 'OFFLINE'", (cmd_json,))
+            for rip in resolved_ips:
+                cmd_json = json.dumps({
+                    "action": "block_remote_ip",
+                    "target": rip,
+                    "original_target": ip,
+                    "reason": reason,
+                    "containment_profile": containment_profile
+                })
+                conn.execute("UPDATE endpoints SET pending_command=? WHERE status != 'OFFLINE'", (cmd_json,))
             conn.commit()
         finally:
             conn.close()
     if request.is_json or request.path.startswith('/api/'):
-        return jsonify({'success': True, 'ip': ip, 'action': 'blocked', 'containment_profile': containment_profile})
+        return jsonify({'success': True, 'ip': ip, 'action': 'blocked', 'containment_profile': containment_profile, 'resolved_ips': res.get('resolved_ips', [ip]) if ip else []})
     return redirect(url_for('network_view'))
 
 @app.route('/api/agents/<hostname>/profile', methods=['POST'])
@@ -566,12 +575,14 @@ def handle_unblock():
         req_json = {}
     ip = (req_json.get('ip') or req_json.get('ip_address') or request.form.get('ip') or request.form.get('ip_address') or '').strip()
     if ip:
-        unblock_ip(ip)
+        res = unblock_ip(ip)
+        resolved_ips = res.get('resolved_ips') or [ip]
         # Push unblock command to active endpoints
         conn = get_conn()
         try:
-            cmd_json = json.dumps({"action": "unblock_remote_ip", "target": ip})
-            conn.execute("UPDATE endpoints SET pending_command=? WHERE status != 'OFFLINE'", (cmd_json,))
+            for rip in resolved_ips:
+                cmd_json = json.dumps({"action": "unblock_remote_ip", "target": rip})
+                conn.execute("UPDATE endpoints SET pending_command=? WHERE status != 'OFFLINE'", (cmd_json,))
             conn.commit()
         finally:
             conn.close()
@@ -620,6 +631,73 @@ def agent_logs(hostname):
         })
     finally:
         conn.close()
+
+def create_or_deduplicate_alert(
+    conn,
+    now_iso: str,
+    sev: str,
+    rname: str,
+    description: str,
+    src_ip: str = None,
+    src_user: str = None,
+    device_name: str = None,
+    process: str = None,
+    event_id: int = None,
+    mitre_tactic: str = None,
+    mitre_technique: str = None,
+    raw_event: str = None,
+    threat_category: str = 'GENERAL',
+    dedup_window_minutes: int = 15
+) -> int:
+    """
+    Intelligent Alert De-duplication and Alert Fatigue Prevention:
+    Checks if an identical OPEN alert exists for (rule_name, device_name, process, src_ip)
+    within the sliding `dedup_window_minutes` (default: 15 mins).
+    If found: increments occurrence_count, updates last_seen timestamp, and updates description.
+    If not found: creates a fresh alert record with occurrence_count=1 and last_seen=now_iso.
+    """
+    from datetime import datetime, timedelta
+    cutoff = (datetime.now() - timedelta(minutes=dedup_window_minutes)).isoformat()
+    dev = device_name or 'Localhost'
+    proc = process or ''
+    ip = src_ip or ''
+
+    existing = conn.execute("""
+        SELECT id, occurrence_count, description FROM alerts
+        WHERE rule_name = ?
+          AND device_name = ?
+          AND COALESCE(process, '') = ?
+          AND COALESCE(src_ip, '') = ?
+          AND status = 'OPEN'
+          AND (last_seen >= ? OR timestamp >= ?)
+        ORDER BY id DESC LIMIT 1
+    """, (rname, dev, proc, ip, cutoff, cutoff)).fetchone()
+
+    if existing:
+        new_count = (existing['occurrence_count'] or 1) + 1
+        base_desc = existing['description'] or description
+        base_desc_clean = re.sub(r"\s*\[Repeated \d+x\]", "", base_desc)
+        new_desc = f"{base_desc_clean} [Repeated {new_count}x]"
+        conn.execute("""
+            UPDATE alerts
+            SET occurrence_count = ?, last_seen = ?, description = ?, raw_event = COALESCE(?, raw_event)
+            WHERE id = ?
+        """, (new_count, now_iso, new_desc, raw_event, existing['id']))
+        return existing['id']
+    else:
+        cur = conn.execute("""
+            INSERT INTO alerts (
+                timestamp, severity, rule_name, description, src_ip, src_user,
+                device_name, process, event_id, mitre_tactic, mitre_technique,
+                raw_event, status, threat_category, occurrence_count, last_seen
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'OPEN', ?, 1, ?)
+        """, (
+            now_iso, sev, rname, description, src_ip, src_user or dev,
+            dev, proc or 'powershell.exe', event_id, mitre_tactic, mitre_technique,
+            raw_event, threat_category, now_iso
+        ))
+        return cur.lastrowid
 
 @app.route('/api/v1/telemetry', methods=['POST'])
 def receive_telemetry():
@@ -770,30 +848,74 @@ def receive_telemetry():
 
             # Use Case 5: Rogue Persistence & Privilege Escalation (T1053.005 / T1078.003 / T1070.001)
             elif eid in [4698, 4697, 4720, 4732, 1102]:
-                should_alert = True
                 threat_cat = "PERSISTENCE"
                 if eid == 1102:
+                    should_alert = True
                     rname = "Windows Audit Log Cleared"
                     sev = "CRITICAL"
                     tactic = "Defense Evasion"
                     technique = "T1070.001 - Clear Windows Event Logs"
                     alert_reason = f"Security audit log was cleared/wiped on {hostname} by '{user}' (Anti-Forensics)"
                 elif eid == 4698:
-                    rname = "Rogue Scheduled Task Created"
-                    sev = "HIGH"
-                    tactic = "Persistence"
-                    technique = "T1053.005 - Scheduled Task"
+                    task_name = (ev.get('raw_fields', {}).get('TaskName') or details).lower()
+                    suspicious_task_indicators = [
+                        'powershell', 'cmd.exe', 'mshta', 'rundll32', 'wscript', 'cscript',
+                        '\\temp\\', '\\appdata\\', '\\users\\', '\\downloads\\'
+                    ]
+                    is_suspicious_task = any(ind in f"{task_name} {low_cmd}" for ind in suspicious_task_indicators)
+                    benign_tasks = [
+                        'microsoftedgeupdatetask', 'googleupdate', 'usoclient',
+                        'windowsdefender', 'defender_clean', 'systemsoundsservice'
+                    ]
+                    is_known_benign_task = any(b in task_name for b in benign_tasks)
+                    
+                    if is_suspicious_task or not is_known_benign_task:
+                        should_alert = True
+                        rname = "Rogue Scheduled Task Created"
+                        sev = "HIGH" if is_suspicious_task else "MEDIUM"
+                        tactic = "Persistence"
+                        technique = "T1053.005 - Scheduled Task"
+                    else:
+                        should_alert = False
                 elif eid == 4697:
-                    rname = "New System Service Installed"
-                    sev = "HIGH"
-                    tactic = "Persistence"
-                    technique = "T1543.003 - Windows Service"
+                    # Filter benign OS/browser service installations (False Positive reduction)
+                    service_fields = ev.get('raw_fields', {})
+                    s_name = (service_fields.get('ServiceName') or ev.get('ServiceName') or '').lower()
+                    s_file = (service_fields.get('ServiceFileName') or ev.get('ServiceFileName') or cmdline or '').lower()
+                    s_combined = f"{s_name} {s_file} {details.lower()}"
+                    
+                    suspicious_service_indicators = [
+                        'powershell', 'cmd.exe', 'mshta', 'rundll32', 'cscript', 'wscript',
+                        'bitsadmin', 'regsvr32', '.bat', '.vbs', '.ps1',
+                        '\\temp\\', '\\tmp\\', '\\appdata\\', '\\users\\', '\\downloads\\'
+                    ]
+                    is_suspicious_service = any(ind in s_combined for ind in suspicious_service_indicators)
+                    
+                    benign_services = [
+                        'trustedinstaller', 'mpksl', 'mpengine', 'edgeupdate', 'edge elevation',
+                        'googlechrome', 'google chrome', 'google update', 'microsoft edge',
+                        'wuauserv', 'windefend', 'windows defender', 'clr_optimization_v',
+                        'onedrive', 'dropbox'
+                    ]
+                    is_known_benign = any(b in s_combined for b in benign_services)
+                    
+                    if is_suspicious_service or not is_known_benign:
+                        should_alert = True
+                        rname = "New System Service Installed"
+                        sev = "HIGH" if is_suspicious_service else "MEDIUM"
+                        tactic = "Persistence"
+                        technique = "T1543.003 - Windows Service"
+                        alert_reason = f"New system service installed on {hostname}: {s_name or 'Service'} ({s_file[:120]})"
+                    else:
+                        should_alert = False
                 elif eid == 4732:
+                    should_alert = True
                     rname = "Member Added to Security Group"
                     sev = "HIGH"
                     tactic = "Privilege Escalation"
                     technique = "T1078.003 - Local Accounts"
                 elif eid == 4720:
+                    should_alert = True
                     rname = "Local User Account Created"
                     sev = "HIGH"
                     tactic = "Persistence"
@@ -801,20 +923,46 @@ def receive_telemetry():
 
             # Fallback for standard high-severity audit events & failed logons
             elif eid == 4625:
-                should_alert = True
-                rname = "Windows Logon Failure"
-                sev = "MEDIUM"
-                threat_cat = "CREDENTIAL_ACCESS"
-                tactic = "Credential Access"
-                technique = "T1110 - Brute Force"
+                # False Positive Reduction: Avoid alerting on single mistyped passwords.
+                # Only alert if >= 4 logon failures occur on this host within 5 minutes.
+                from datetime import timedelta
+                cutoff_5m = (datetime.now() - timedelta(minutes=5)).isoformat()
+                recent_fails = conn.execute("""
+                    SELECT COUNT(*) as cnt FROM telemetry_logs
+                    WHERE event_id = 4625 AND hostname = ? AND timestamp >= ?
+                """, (hostname, cutoff_5m)).fetchone()
+                fail_count = (recent_fails['cnt'] if recent_fails else 0) + 1
+                
+                if fail_count >= 4:
+                    should_alert = True
+                    rname = "Brute Force / Password Spray Attack"
+                    sev = "HIGH"
+                    threat_cat = "CREDENTIAL_ACCESS"
+                    tactic = "Credential Access"
+                    technique = "T1110 - Brute Force"
+                    alert_reason = f"High-volume logon failures: {fail_count} failed login attempts detected on {hostname} for account '{user or 'unknown'}' within 5 minutes."
+                else:
+                    should_alert = False
             elif sev in ['HIGH', 'CRITICAL']:
                 should_alert = True
 
             if should_alert:
-                conn.execute("""
-                    INSERT INTO alerts (timestamp, severity, rule_name, description, src_ip, src_user, device_name, process, event_id, mitre_tactic, mitre_technique, raw_event, status, threat_category)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'OPEN', ?)
-                """, (now_iso, sev, rname, alert_reason, src_ip, user or hostname, hostname, proc or 'powershell.exe', eid, tactic, technique, raw_json_str, threat_cat))
+                create_or_deduplicate_alert(
+                    conn=conn,
+                    now_iso=now_iso,
+                    sev=sev,
+                    rname=rname,
+                    description=alert_reason,
+                    src_ip=src_ip,
+                    src_user=user or hostname,
+                    device_name=hostname,
+                    process=proc or 'powershell.exe',
+                    event_id=eid,
+                    mitre_tactic=tactic,
+                    mitre_technique=technique,
+                    raw_event=raw_json_str,
+                    threat_category=threat_cat
+                )
 
         # 4. Check for anomalous outbound C2 network connections (Use Case 4: C2 Beaconing T1071)
         C2_PORTS = {4444, 1337, 8888, 7070, 9001, 6667, 31337}
@@ -824,10 +972,22 @@ def receive_telemetry():
                 try:
                     rem_ip, rem_port = rem.rsplit(':', 1)
                     if rem_port.isdigit() and int(rem_port) in C2_PORTS:
-                        conn.execute("""
-                            INSERT INTO alerts (timestamp, severity, rule_name, description, src_ip, src_user, device_name, process, event_id, mitre_tactic, mitre_technique, raw_event, status, threat_category)
-                            VALUES (?, 'HIGH', 'Malicious C2 Beaconing Detected', ?, ?, ?, ?, ?, 9002, 'Command and Control', 'T1071.001 - Web Protocols', ?, 'OPEN', 'EXFILTRATION')
-                        """, (now_iso, f"Outbound socket connection established to known C2 beacon port :{rem_port} ({rem})", rem_ip, hostname, hostname, f"PID:{c.get('pid', '-')}", json.dumps(c)))
+                        create_or_deduplicate_alert(
+                            conn=conn,
+                            now_iso=now_iso,
+                            sev='HIGH',
+                            rname='Malicious C2 Beaconing Detected',
+                            description=f"Outbound socket connection established to known C2 beacon port :{rem_port} ({rem})",
+                            src_ip=rem_ip,
+                            src_user=hostname,
+                            device_name=hostname,
+                            process=f"PID:{c.get('pid', '-')}",
+                            event_id=9002,
+                            mitre_tactic='Command and Control',
+                            mitre_technique='T1071.001 - Web Protocols',
+                            raw_event=json.dumps(c),
+                            threat_category='EXFILTRATION'
+                        )
                 except Exception:
                     pass
 
@@ -843,10 +1003,22 @@ def receive_telemetry():
             pname = p.get('name', '').lower()
             if pname in SUSPICIOUS_TOOLS:
                 tool_rname, tool_cat, tool_tech = SUSPICIOUS_TOOLS[pname]
-                conn.execute("""
-                    INSERT INTO alerts (timestamp, severity, rule_name, description, src_ip, src_user, device_name, process, event_id, mitre_tactic, mitre_technique, raw_event, status, threat_category)
-                    VALUES (?, 'HIGH', ?, ?, ?, ?, ?, ?, 1, 'Execution', ?, ?, 'OPEN', ?)
-                """, (now_iso, f"Suspicious Tool: {tool_rname}", f"Suspicious tool {pname} actively running on {hostname} (PID: {p.get('pid', '-')})", ip_addr, hostname, hostname, pname, tool_tech, json.dumps(p), tool_cat))
+                create_or_deduplicate_alert(
+                    conn=conn,
+                    now_iso=now_iso,
+                    sev='HIGH',
+                    rname=f"Suspicious Tool: {tool_rname}",
+                    description=f"Suspicious tool {pname} actively running on {hostname} (PID: {p.get('pid', '-')})",
+                    src_ip=ip_addr,
+                    src_user=hostname,
+                    device_name=hostname,
+                    process=pname,
+                    event_id=1,
+                    mitre_tactic='Execution',
+                    mitre_technique=tool_tech,
+                    raw_event=json.dumps(p),
+                    threat_category=tool_cat
+                )
 
         # 6. Check for Process Masquerading (Disguised Malware - T1036.005)
         SYSTEM_BINARIES = {
@@ -864,10 +1036,22 @@ def receive_telemetry():
             if pname in SYSTEM_BINARIES and pexe:
                 expected_dir = SYSTEM_BINARIES[pname]
                 if not pexe.startswith(expected_dir) or any(k in pexe for k in SUSPICIOUS_DIRS):
-                    conn.execute("""
-                        INSERT INTO alerts (timestamp, severity, rule_name, description, src_ip, src_user, device_name, process, event_id, mitre_tactic, mitre_technique, raw_event, status, threat_category)
-                        VALUES (?, 'CRITICAL', 'Process Masquerading (Disguised Malware)', ?, ?, ?, ?, ?, 9005, 'Defense Evasion', 'T1036.005 - Masquerading', ?, 'OPEN', 'DEFENSE_EVASION')
-                    """, (now_iso, f"CRITICAL EVASION ALERT: System binary '{pname}' executing from abnormal directory '{pexe}' on {hostname}! Potential disguised malware.", ip_addr, hostname, hostname, pname, json.dumps(p)))
+                    create_or_deduplicate_alert(
+                        conn=conn,
+                        now_iso=now_iso,
+                        sev='CRITICAL',
+                        rname='Process Masquerading (Disguised Malware)',
+                        description=f"CRITICAL EVASION ALERT: System binary '{pname}' executing from abnormal directory '{pexe}' on {hostname}! Potential disguised malware.",
+                        src_ip=ip_addr,
+                        src_user=hostname,
+                        device_name=hostname,
+                        process=pname,
+                        event_id=9005,
+                        mitre_tactic='Defense Evasion',
+                        mitre_technique='T1036.005 - Masquerading',
+                        raw_event=json.dumps(p),
+                        threat_category='DEFENSE_EVASION'
+                    )
 
         # 7. Automated Multi-Vector Attack Chain Correlator
         from datetime import timedelta
@@ -937,10 +1121,22 @@ def ingest_cloud():
         """, (host, now_iso, desc, eid, user, ev.get('src_ip', '0.0.0.0'), json.dumps(ev)))
         
         if sev in ['MEDIUM', 'HIGH', 'CRITICAL']:
-            conn.execute("""
-                INSERT INTO alerts (timestamp, severity, rule_name, description, src_ip, src_user, device_name, process, event_id, mitre_tactic, mitre_technique, raw_event, status)
-                VALUES (?, ?, ?, ?, ?, ?, ?, 'cloud', ?, ?, ?, ?, 'OPEN')
-            """, (now_iso, sev, rname, desc, ev.get('src_ip', '0.0.0.0'), user, host, eid, tactic, technique, json.dumps(ev)))
+            create_or_deduplicate_alert(
+                conn=conn,
+                now_iso=now_iso,
+                sev=sev,
+                rname=rname,
+                description=desc,
+                src_ip=ev.get('src_ip', '0.0.0.0'),
+                src_user=user,
+                device_name=host,
+                process='cloud',
+                event_id=eid,
+                mitre_tactic=tactic,
+                mitre_technique=technique,
+                raw_event=json.dumps(ev),
+                threat_category='INITIAL_ACCESS'
+            )
             
         ingested += 1
     conn.commit()

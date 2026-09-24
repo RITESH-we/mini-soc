@@ -52,6 +52,17 @@ def init_db():
     except Exception:
         pass
 
+    try:
+        alert_cols = [r['name'] for r in conn.execute("PRAGMA table_info(alerts)").fetchall()]
+        if alert_cols and 'occurrence_count' not in alert_cols:
+            conn.execute("ALTER TABLE alerts ADD COLUMN occurrence_count INTEGER DEFAULT 1")
+            conn.commit()
+        if alert_cols and 'last_seen' not in alert_cols:
+            conn.execute("ALTER TABLE alerts ADD COLUMN last_seen TEXT")
+            conn.commit()
+    except Exception:
+        pass
+
     with open(SCHEMA, 'r', encoding='utf-8') as f:
         conn.executescript(f.read())
 

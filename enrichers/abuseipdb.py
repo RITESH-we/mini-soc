@@ -1,9 +1,12 @@
 import requests
+from network.ips_responder import is_public_routable_ip
 
 BASE = 'https://api.abuseipdb.com/api/v2'
 
 def lookup_ip(ip, api_key):
-    if not ip or not api_key or 'YOUR' in api_key:
+    if not ip or not is_public_routable_ip(ip):
+        return {'score': 0, 'country': 'Private LAN', 'isp': 'RFC 1918 (Private Network)', 'totalReports': 0}
+    if not api_key or 'YOUR' in api_key:
         return {'score': -1, 'country': '', 'isp': ''}
     try:
         r = requests.get(f'{BASE}/check',

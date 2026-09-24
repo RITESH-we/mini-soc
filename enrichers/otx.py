@@ -34,8 +34,18 @@ def lookup_indicator(indicator_type: str, indicator: str, api_key: str = None) -
         
     return {"pulse_count": 0, "tags": [], "malicious": False}
 
+from network.ips_responder import is_public_routable_ip
+
 def lookup_ip(ip: str, api_key: str = None) -> dict:
+    if not ip or not is_public_routable_ip(ip):
+        return {
+            "pulse_count": 0,
+            "tags": ["RFC1918", "Private"],
+            "malicious": False,
+            "reputation": 0
+        }
     return lookup_indicator("IPv4", ip, api_key)
 
 def lookup_hash(file_hash: str, api_key: str = None) -> dict:
     return lookup_indicator("file", file_hash, api_key)
+

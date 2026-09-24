@@ -851,46 +851,80 @@ def execute_remediation(action_payload, server_url=None):
         return f"Process {target} killed"
 
     elif action == "block_remote_ip" and target:
-        rule_name = f"MiniSOC_EDR_Drop_{target.replace(':', '_')}"
+        # Sanitize target (strip URLs and resolve domains if necessary)
+        clean_target = str(target).strip()
+        if "://" in clean_target:
+            clean_target = clean_target.split("://", 1)[1]
+        if "/" in clean_target:
+            clean_target = clean_target.split("/", 1)[0]
+        if clean_target.count(":") == 1 and not clean_target.startswith("["):
+            parts = clean_target.rsplit(":", 1)
+            if parts[1].isdigit():
+                clean_target = parts[0]
+
+        try:
+            target_ip = socket.gethostbyname(clean_target)
+        except Exception:
+            target_ip = clean_target
+
+        rule_name = f"MiniSOC_EDR_Drop_{target_ip.replace(':', '_')}"
         containment_profile = action_payload.get("containment_profile", "BIDIRECTIONAL_DROP")
         if system == "Windows":
             # Always block outbound to prevent C2 communication / exfiltration
             r1 = silent_run([
                 "netsh", "advfirewall", "firewall", "add", "rule",
-                f"name={rule_name}", "dir=out", "action=block", f"remoteip={target}"
+                f"name={rule_name}", "dir=out", "action=block", f"remoteip={target_ip}"
             ], capture_output=True, text=True)
-            r2 = None
             if containment_profile == "BIDIRECTIONAL_DROP":
-                r2 = silent_run([
+                silent_run([
                     "netsh", "advfirewall", "firewall", "add", "rule",
-                    f"name={rule_name}_in", "dir=in", "action=block", f"remoteip={target}"
+                    f"name={rule_name}_in", "dir=in", "action=block", f"remoteip={target_ip}"
                 ], capture_output=True, text=True)
             if r1.returncode != 0:
                 err_msg = (r1.stderr or r1.stdout or "Elevation required").strip()
-                log_msg(f"[-] Active Defense Error: Failed to add Windows Firewall rule for {target}: {err_msg}")
+                # If elevation required, attempt PowerShell Start-Process -Verb RunAs
+                if "elevation" in err_msg.lower() or "administrator" in err_msg.lower():
+                    ps_cmd = f"Start-Process netsh -ArgumentList 'advfirewall firewall add rule name=\"{rule_name}\" dir=out action=block remoteip={target_ip}' -Verb RunAs -WindowStyle Hidden"
+                    if containment_profile == "BIDIRECTIONAL_DROP":
+                        ps_cmd += f"; Start-Process netsh -ArgumentList 'advfirewall firewall add rule name=\"{rule_name}_in\" dir=in action=block remoteip={target_ip}' -Verb RunAs -WindowStyle Hidden"
+                    silent_run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_cmd], capture_output=True)
+                    log_msg(f"[!] Active Defense: Requested elevation for Windows Firewall drop on {target_ip}.")
+                    return f"IP {target_ip} drop requested via elevated prompt"
+                log_msg(f"[-] Active Defense Error: Failed to add Windows Firewall rule for {target_ip}: {err_msg}")
                 return f"Firewall error: {err_msg}"
         elif system == "Linux":
-            r1 = silent_run(["iptables", "-A", "OUTPUT", "-d", target, "-j", "DROP"], capture_output=True, text=True)
+            r1 = silent_run(["iptables", "-A", "OUTPUT", "-d", target_ip, "-j", "DROP"], capture_output=True, text=True)
             if containment_profile == "BIDIRECTIONAL_DROP":
-                silent_run(["iptables", "-A", "INPUT", "-s", target, "-j", "DROP"], capture_output=True, text=True)
+                silent_run(["iptables", "-A", "INPUT", "-s", target_ip, "-j", "DROP"], capture_output=True, text=True)
             if r1.returncode != 0:
                 log_msg(f"[-] Active Defense Error: iptables returned {r1.returncode}")
                 return "iptables error"
-        log_msg(f"[!] Active Defense: Remote IP {target} dropped on local firewall by MiniSOC EDR ({containment_profile}).")
-        return f"IP {target} blocked locally ({containment_profile})"
+        log_msg(f"[!] Active Defense: Remote IP {target_ip} dropped on local firewall by MiniSOC EDR ({containment_profile}).")
+        return f"IP {target_ip} blocked locally ({containment_profile})"
 
     elif action == "unblock_remote_ip" and target:
-        rule_name = f"MiniSOC_EDR_Drop_{target.replace(':', '_')}"
+        clean_target = str(target).strip()
+        if "://" in clean_target:
+            clean_target = clean_target.split("://", 1)[1]
+        if "/" in clean_target:
+            clean_target = clean_target.split("/", 1)[0]
+        try:
+            target_ip = socket.gethostbyname(clean_target)
+        except Exception:
+            target_ip = clean_target
+
+        rule_name = f"MiniSOC_EDR_Drop_{target_ip.replace(':', '_')}"
         if system == "Windows":
             r1 = silent_run(["netsh", "advfirewall", "firewall", "delete", "rule", f"name={rule_name}"], capture_output=True, text=True)
             r2 = silent_run(["netsh", "advfirewall", "firewall", "delete", "rule", f"name={rule_name}_in"], capture_output=True, text=True)
-            if r1.returncode != 0:
-                log_msg(f"[-] Active Defense Note: Rule for {target} not found or error: {(r1.stderr or '').strip()}")
+            if r1.returncode != 0 and ("elevation" in (r1.stderr or '').lower() or "administrator" in (r1.stderr or '').lower()):
+                ps_cmd = f"Start-Process netsh -ArgumentList 'advfirewall firewall delete rule name=\"{rule_name}\"' -Verb RunAs -WindowStyle Hidden; Start-Process netsh -ArgumentList 'advfirewall firewall delete rule name=\"{rule_name}_in\"' -Verb RunAs -WindowStyle Hidden"
+                silent_run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_cmd], capture_output=True)
         elif system == "Linux":
-            silent_run(["iptables", "-D", "OUTPUT", "-d", target, "-j", "DROP"], capture_output=True)
-            silent_run(["iptables", "-D", "INPUT", "-s", target, "-j", "DROP"], capture_output=True)
-        log_msg(f"[+] Active Defense: Local firewall drop removed for IP {target}.")
-        return f"IP {target} unblocked locally"
+            silent_run(["iptables", "-D", "OUTPUT", "-d", target_ip, "-j", "DROP"], capture_output=True)
+            silent_run(["iptables", "-D", "INPUT", "-s", target_ip, "-j", "DROP"], capture_output=True)
+        log_msg(f"[+] Active Defense: Local firewall drop removed for IP {target_ip}.")
+        return f"IP {target_ip} unblocked locally"
         
     elif action == "isolate_host":
         soc_ip = None
