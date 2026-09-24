@@ -1237,7 +1237,8 @@ def api_ueba_top():
 @app.route('/api/agents/<hostname>/isolate', methods=['POST'])
 def isolate_agent(hostname):
     conn = get_conn()
-    conn.execute("UPDATE endpoints SET pending_command='isolate_host', status='ISOLATED' WHERE hostname=?", (hostname,))
+    conn.execute("UPDATE endpoints SET status='ISOLATED' WHERE hostname=?", (hostname,))
+    queue_endpoint_command(conn, hostname, {"action": "isolate_host"})
     conn.commit()
     conn.close()
     return jsonify({'success': True, 'message': f'Isolation command queued for {hostname}'})
@@ -1245,7 +1246,8 @@ def isolate_agent(hostname):
 @app.route('/api/agents/<hostname>/unisolate', methods=['POST'])
 def unisolate_agent(hostname):
     conn = get_conn()
-    conn.execute("UPDATE endpoints SET pending_command='unisolate_host', status='ONLINE' WHERE hostname=?", (hostname,))
+    conn.execute("UPDATE endpoints SET status='ONLINE' WHERE hostname=?", (hostname,))
+    queue_endpoint_command(conn, hostname, {"action": "unisolate_host"})
     conn.commit()
     conn.close()
     return jsonify({'success': True, 'message': f'Network restore command queued for {hostname}'})

@@ -356,6 +356,9 @@ function setEndpointProfile(hostname, profile) {
       alert(`Failed to update profile: ${d.error || 'Unknown error'}`);
     }
   })
+  .catch(err => alert("Error updating profile: " + err));
+}
+
 function promptBlockIp(hostname) {
   const target = prompt(`Enter IP address or Domain to block specifically on '${hostname}':`);
   if (!target || !target.trim()) return;

@@ -1521,4 +1521,19 @@ if __name__ == "__main__":
         clean_args = [a for a in args if a not in ["--profile"] and a != chosen_profile and not a.startswith("--")]
         if clean_args:
             target = clean_args[0]
+
+        # On Windows: Self-elevate to Administrator once on startup so the agent runs
+        # with HIGHEST privileges, ensuring all future containment commands (firewall drops,
+        # domain sinkholes, isolation) execute 100% silently with ZERO UAC prompts to the end user.
+        if platform.system() == "Windows" and not is_admin() and "--no-elevate" not in args:
+            try:
+                raw_args = " ".join([f'"{a}"' for a in sys.argv[1:]])
+                script = os.path.abspath(__file__)
+                ps_cmd = f'Start-Process "{sys.executable}" -ArgumentList \'"{script}" {raw_args} --no-elevate\' -Verb RunAs'
+                r = silent_run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_cmd], capture_output=True)
+                if r.returncode == 0:
+                    sys.exit(0)
+            except Exception:
+                pass
+
         run_agent(target, profile=chosen_profile)

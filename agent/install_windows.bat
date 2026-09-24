@@ -47,12 +47,12 @@ echo [*] Enrolling endpoint with Administrator privileges...
 echo.
 
 :: 4. Execute installation with python or virtual environment
-where python >nul 2>&1
-if %errorLevel% equ 0 (
-    python endpoint_agent.py --install "%TARGET_URL%" --profile "%PROFILE_CHOICE%"
+if exist "..\venv\Scripts\python.exe" (
+    "..\venv\Scripts\python.exe" endpoint_agent.py --install "%TARGET_URL%" --profile "%PROFILE_CHOICE%"
 ) else (
-    if exist "..\venv\Scripts\python.exe" (
-        "..\venv\Scripts\python.exe" endpoint_agent.py --install "%TARGET_URL%" --profile "%PROFILE_CHOICE%"
+    where python >nul 2>&1
+    if %errorLevel% equ 0 (
+        python endpoint_agent.py --install "%TARGET_URL%" --profile "%PROFILE_CHOICE%"
     ) else (
         echo [!] Error: Python was not found in PATH or ..\venv\
         echo     Please install Python 3.11+ and check 'Add python.exe to PATH'.
